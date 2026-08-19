@@ -11,6 +11,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { ManagedSkillDetail, ManagedSkillRow } from './types.ts'
 import { createSkillAccess } from './skills-access.ts'
+import { resolveSkillsManagerView, withViewScope } from './skills-view.ts'
 import { resolveDshSkillsRoot } from './import/importer.ts'
 import { serializeSkillFile } from './import/parser.ts'
 
@@ -22,7 +23,11 @@ function isSkillName(name: string): boolean {
 
 export interface ManagedSkillContext {
   /** DSH context; the skills service is fetched via `ctx.get('skills')`. */
-  readonly ctx: { get?: (name: string) => any; skills?: any }
+  readonly ctx: {
+    get?: (name: string) => any
+    skills?: any
+    logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void }
+  }
   readonly dshHome?: string
 }
 
@@ -59,13 +64,19 @@ export function assertManagedSkillPath(path: string, roots: readonly string[]): 
 
 /** List DSH native skills with management metadata. */
 export async function listManagedSkills(ctx: ManagedSkillContext, cwd?: string): Promise<ManagedSkillRow[]> {
-  const skills = await nativeSkills(ctx)
-  const summaries = await skills.list({ cwd })
+  const view = await resolveSkillsManagerView(ctx.ctx)
+  const summaries = await view.registry.list(withViewScope(view, { cwd }))
+  ctx.ctx.logger?.info?.(
+    '[dsh-skills-manager] skills.list: cwd=%s scopeSource=%s registry=host count=%d',
+    cwd ?? '-',
+    view.scopeSource,
+    summaries.length,
+  )
   const rows: ManagedSkillRow[] = []
   for (const summary of summaries) {
     let path: string | undefined
     try {
-      path = (await skills.get(summary.name, { cwd }))?.path
+      path = (await view.registry.get(summary.name, withViewScope(view, { cwd })))?.path
     } catch {
       path = undefined
     }

@@ -84,16 +84,10 @@ function stringField(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-function resolveCwd(ctx: any, payload: Record<string, unknown>): string | undefined {
+function resolveCwd(payload: Record<string, unknown>): string | undefined {
   const explicit = stringField(payload.cwd)
   if (explicit !== undefined && explicit.length > 0) return explicit
-  try {
-    const sessions = ctx.get?.('sessions')
-    const first = sessions?.list?.()?.[0]
-    return first?.header?.cwd
-  } catch {
-    return undefined
-  }
+  return undefined
 }
 
 async function handle(services: RouteServices, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -125,7 +119,18 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
   try {
     switch (method) {
       case 'skills.list': {
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
+        let sessionCount = 0
+        try {
+          sessionCount = services.ctx.get?.('sessions')?.list?.()?.length ?? 0
+        } catch {
+          sessionCount = 0
+        }
+        services.ctx.logger?.info?.(
+          '[dsh-skills-manager] skills.list request: cwd=%s sessionCount=%d selectedSession=none liveAgent=none preset=default',
+          cwd ?? '-',
+          sessionCount,
+        )
         const skills = await listManagedSkills({ ctx: services.ctx, dshHome: services.dshHome }, cwd)
         ok(res, { skills })
         return
@@ -133,7 +138,7 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
       case 'skills.get': {
         const name = stringField(payload.name)
         if (name === undefined) throw new Error('name is required')
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
         const skill = await getManagedSkill({ ctx: services.ctx, dshHome: services.dshHome }, name, cwd)
         ok(res, { skill })
         return
@@ -147,7 +152,7 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
           throw new Error('name, description and body are required')
         }
         const scope = stringField(payload.scope) ?? 'global'
-        const cwd = scope === 'project' ? resolveCwd(services.ctx, payload) : undefined
+        const cwd = scope === 'project' ? resolveCwd(payload) : undefined
         if (scope === 'project' && cwd === undefined) throw new Error('project scope requires a cwd')
         const skill = await createManagedSkill(
           { ctx: services.ctx, dshHome: services.dshHome },
@@ -164,7 +169,7 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
         if (name === undefined || description === undefined || body === undefined) {
           throw new Error('name, description and body are required')
         }
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
         const skill = await updateManagedSkill(
           { ctx: services.ctx, dshHome: services.dshHome },
           { name, description, ...whenToUse === undefined ? {} : { whenToUse }, body },
@@ -176,13 +181,13 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
       case 'skills.delete': {
         const name = stringField(payload.name)
         if (name === undefined) throw new Error('name is required')
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
         await deleteManagedSkill({ ctx: services.ctx, dshHome: services.dshHome }, name, cwd)
         ok(res, { deleted: name })
         return
       }
       case 'import.scan': {
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
         const report = await runExternalImport(services, cwd)
         ok(res, { report })
         return
@@ -197,7 +202,7 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
         return
       }
       case 'import.conflicts': {
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
         const rows: ManagedSkillRow[] = await listManagedSkills({ ctx: services.ctx, dshHome: services.dshHome }, cwd)
         const conflicts = listConflicts(services.metadata, rows)
         ok(res, { conflicts })
@@ -207,7 +212,7 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
         const name = stringField(payload.name)
         const source = stringField(payload.source) as ExternalSourceId | undefined
         if (name === undefined || source === undefined) throw new Error('name and source are required')
-        const cwd = resolveCwd(services.ctx, payload)
+        const cwd = resolveCwd(payload)
         await resolveConflict({ ctx: services.ctx, dshHome: services.dshHome }, services.metadata, { name, source }, cwd)
         ok(res, { resolved: name })
         return

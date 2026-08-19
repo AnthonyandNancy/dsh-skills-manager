@@ -25,7 +25,7 @@ export const importMetadataRecordSchema = z.object({
   resolved: z.boolean().default(false),
 })
 
-export const skillsManagerMetadataSchema = z.object({
+export const skillsManagerMetadataSchema: ReturnType<typeof z.object> = z.object({
   externalImportCompleted: z.boolean(),
   lastScanAt: z.string().default(''),
   records: z.array(importMetadataRecordSchema).default([]),
