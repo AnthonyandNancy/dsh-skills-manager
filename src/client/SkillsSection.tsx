@@ -97,6 +97,18 @@ const styles: Record<string, CSSProperties> = {
   summaryItem: { display: 'grid', gap: '2px', minWidth: 0 },
   summaryNumber: { fontSize: '20px', fontWeight: 700 },
   summaryLabel: { fontSize: '12px', color: 'var(--dsw-alias-text-secondary, #6b7280)', overflow: 'hidden', textOverflow: 'ellipsis' },
+  lastScan: { fontSize: '11px', color: 'var(--dsw-alias-text-tertiary, #9ca3af)', marginBottom: '4px' },
+  detailsTitle: { fontSize: '13px', fontWeight: 600, margin: '12px 0 6px' },
+  metrics: { display: 'grid', gap: '2px', maxWidth: '360px' },
+  metricRow: { display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px' },
+  metricLabel: { color: 'var(--dsw-alias-text-secondary, #6b7280)', minWidth: 0 },
+  metricLabelStrong: { fontWeight: 600, minWidth: 0, borderTop: '1px solid var(--dsw-alias-border, #e5e7eb)', paddingTop: '2px' },
+  metricValue: { fontVariantNumeric: 'tabular-nums' },
+  metricValueStrong: { fontVariantNumeric: 'tabular-nums', fontWeight: 600, borderTop: '1px solid var(--dsw-alias-border, #e5e7eb)', paddingTop: '2px' },
+  note: { fontSize: '12px', color: 'var(--dsw-alias-text-secondary, #6b7280)', margin: '8px 0 0', overflowWrap: 'anywhere' },
+  groupList: { margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '8px' },
+  groupItem: { border: '1px solid var(--dsw-alias-border-subtle, #f3f4f6)', borderRadius: '6px', padding: '8px', fontSize: '13px', minWidth: 0, overflowWrap: 'anywhere' },
+  groupMeta: { fontSize: '12px', color: 'var(--dsw-alias-text-secondary, #6b7280)' },
   list: { margin: 0, paddingLeft: '18px', fontSize: '13px', overflowWrap: 'anywhere' },
 }
 
@@ -505,14 +517,24 @@ function LocationValue({ path, t }: { path?: string; t: TranslateNS<typeof SKILL
   )
 }
 
+/**
+ * Import summary card.
+ *
+ * The five headline numbers deliberately mix units: `Scanned` and
+ * `Deduplicated` count candidate copies, `In DSH` counts unique skills. They
+ * are not designed to sum, and the details view states that explicitly.
+ */
 function ImportSummary({ report, t }: { report: ImportReport; t: TranslateNS<typeof SKILLS_MANAGER_NS> }): ReactElement {
   return (
-    <div style={styles.summary}>
-      <SummaryItem label={t('import.summary.scanned')} value={report.scanned} />
-      <SummaryItem label={t('import.summary.imported')} value={report.imported} />
-      <SummaryItem label={t('import.summary.duplicates')} value={report.duplicates} />
-      <SummaryItem label={t('import.summary.conflicts')} value={report.conflicts} />
-      <SummaryItem label={t('import.summary.invalid')} value={report.invalid} />
+    <div>
+      <div style={styles.summary}>
+        <SummaryItem label={t('import.summary.scanned')} value={report.scannedCandidates} />
+        <SummaryItem label={t('import.summary.inDsh')} value={report.inDsh} />
+        <SummaryItem label={t('import.summary.deduplicated')} value={report.duplicateCopies} />
+        <SummaryItem label={t('import.summary.conflicts')} value={report.conflicts} />
+        <SummaryItem label={t('import.summary.invalid')} value={report.invalid} />
+      </div>
+      <div style={styles.lastScan}>{t('import.lastScan', { time: formatTimestamp(report.finishedAt) })}</div>
     </div>
   )
 }
@@ -526,13 +548,84 @@ function SummaryItem({ label, value }: { label: string; value: number }): ReactE
   )
 }
 
+function formatTimestamp(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+}
+
+function MetricRow({ label, value, strong }: { label: string; value: number; strong?: boolean }): ReactElement {
+  return (
+    <div style={styles.metricRow}>
+      <span style={strong === true ? styles.metricLabelStrong : styles.metricLabel}>{label}</span>
+      <span style={strong === true ? styles.metricValueStrong : styles.metricValue}>{value}</span>
+    </div>
+  )
+}
+
 function ImportReportView({ report, t }: { report: ImportReport; t: TranslateNS<typeof SKILLS_MANAGER_NS> }): ReactElement {
   const [filter, setFilter] = useState<'all' | ImportReport['items'][number]['result']>('all')
   const items = report.items.filter(item => filter === 'all' || item.result === filter)
   const filters = ['all', 'new', 'duplicate', 'conflict', 'invalid', 'skipped'] as const
+  // Only multi-copy groups are worth aggregating; single-copy skills add noise.
+  const groups = report.duplicateGroups
+    .filter(group => group.candidateCount > 1)
+    .sort((a, b) => b.candidateCount - a.candidateCount)
   return (
     <div style={styles.panel}>
       <ImportSummary report={report} t={t} />
+
+      <h3 style={styles.detailsTitle}>{t('import.details.title')}</h3>
+      <div style={styles.metrics}>
+        <MetricRow label={t('import.details.scanned')} value={report.scannedCandidates} />
+        <MetricRow label={t('import.details.uniqueValid')} value={report.uniqueValidSkills} />
+        <MetricRow label={t('import.details.inDsh')} value={report.inDsh} />
+        <MetricRow label={t('import.details.importedThisScan')} value={report.importedThisScan} />
+        <MetricRow label={t('import.details.deduplicated')} value={report.duplicateCopies} />
+        <MetricRow label={t('import.details.conflicts')} value={report.conflicts} />
+        <MetricRow label={t('import.details.invalid')} value={report.invalid} />
+        {report.failed > 0 ? <MetricRow label={t('import.details.failed')} value={report.failed} /> : null}
+      </div>
+      <p style={styles.note}>{t('import.unitNote')}</p>
+
+      {report.duplicateCopies > 0 ? (
+        <>
+          <h3 style={styles.detailsTitle}>{t('import.breakdown.title')}</h3>
+          <div style={styles.metrics}>
+            <MetricRow label={t('import.breakdown.samePath')} value={report.duplicateBreakdown.samePath} />
+            <MetricRow label={t('import.breakdown.sameContent')} value={report.duplicateBreakdown.sameContent} />
+            <MetricRow label={t('import.breakdown.alreadyInDsh')} value={report.duplicateBreakdown.alreadyInDsh} />
+            <MetricRow label={t('import.breakdown.total')} value={report.duplicateCopies} strong />
+          </div>
+        </>
+      ) : null}
+
+      {groups.length > 0 ? (
+        <>
+          <h3 style={styles.detailsTitle}>{t('import.groups.title')}</h3>
+          <ul style={styles.groupList}>
+            {groups.map(group => (
+              <li key={group.key} style={styles.groupItem}>
+                <div><code>{group.name}</code></div>
+                <div style={styles.groupMeta}>
+                  {t('import.groups.status')}: {group.inDsh ? t('import.groups.statusInDsh') : t('import.groups.statusNotInDsh')}
+                </div>
+                <div style={styles.groupMeta}>
+                  {t('import.groups.sources')}: {[...new Set(group.sources.map(source => source.source))].join(', ')}
+                </div>
+                <div style={styles.groupMeta}>
+                  {t('import.groups.candidates')}: {group.candidateCount} · {t('import.groups.uniqueSkill')}: 1
+                </div>
+                <div style={styles.groupMeta}>
+                  {t('import.groups.result')}: {group.importedThisScan
+                    ? t('import.groups.resultImported')
+                    : t('import.groups.resultMerged')}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
       <div style={{ margin: '8px 0', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
         {filters.map(name => (
           <Button

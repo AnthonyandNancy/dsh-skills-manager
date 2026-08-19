@@ -9,7 +9,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { MetadataStore } from './storage.ts'
 import { listManagedSkills, getManagedSkill, createManagedSkill, updateManagedSkill, deleteManagedSkill } from './skills-service.ts'
-import { runExternalImport, reportFromMetadata } from './import/importer.ts'
+import { runExternalImport, reportFromMetadata, auditDshSkillDuplicates } from './import/importer.ts'
 import { listConflicts, resolveConflict } from './import/resolver.ts'
 import type { ExternalSourceId, ManagedSkillRow } from './types.ts'
 
@@ -193,12 +193,21 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
         return
       }
       case 'import.meta': {
+        const meta = services.metadata.get()
         const report = reportFromMetadata(services.metadata)
         ok(res, {
-          externalImportCompleted: services.metadata.get().externalImportCompleted,
-          lastScanAt: services.metadata.get().lastScanAt,
+          externalImportCompleted: meta.externalImportCompleted,
+          ...meta.lastScan === undefined ? {} : { lastScanAt: meta.lastScan.finishedAt },
           ...report === undefined ? {} : { report },
         })
+        return
+      }
+      case 'import.audit': {
+        // Report-only diagnostics, requested explicitly: it re-fingerprints
+        // every native skill and must never run during normal rendering.
+        const cwd = resolveCwd(payload)
+        const audit = await auditDshSkillDuplicates(services.ctx, cwd)
+        ok(res, { audit })
         return
       }
       case 'import.conflicts': {

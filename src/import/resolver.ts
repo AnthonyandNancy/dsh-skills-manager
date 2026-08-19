@@ -22,12 +22,23 @@ export interface ResolveConflictInput {
   readonly source: ExternalSourceId
 }
 
+/**
+ * Unresolved conflict records from the most recent scan.
+ *
+ * Conflicts always come from `lastScan`: a conflict that no longer appears in
+ * the latest scan no longer exists.
+ */
+function conflictRecords(metadata: MetadataStore): ImportMetadataRecord[] {
+  const records = metadata.get().lastScan?.records ?? []
+  return records.filter(record => record.result === 'conflict' && record.resolved !== true)
+}
+
 /** Group stored conflict records into UI-ready conflict views. */
 export function listConflicts(
   metadata: MetadataStore,
   existingSkills: { name: string; path?: string }[],
 ): ConflictView[] {
-  const records = metadata.get().records.filter(record => record.result === 'conflict' && record.resolved !== true)
+  const records = conflictRecords(metadata)
   const byName = new Map<string, ImportMetadataRecord[]>()
   for (const record of records) {
     const group = byName.get(record.name) ?? []
@@ -67,9 +78,7 @@ export async function resolveConflict(
   input: ResolveConflictInput,
   cwd?: string,
 ): Promise<void> {
-  const records = metadata.get().records.filter(record =>
-    record.name === input.name && record.result === 'conflict' && record.resolved !== true,
-  )
+  const records = conflictRecords(metadata).filter(record => record.name === input.name)
   const chosen = records.find(record => record.source === input.source)
   if (chosen === undefined) {
     throw new Error(`conflict "${input.name}" has no candidate from source "${input.source}"`)
@@ -107,14 +116,20 @@ export async function resolveConflict(
     await cp(chosen.originalPath, targetDir, { recursive: true, force: true })
   }
 
-  const all = metadata.get().records
-  const next = all.map(record =>
-    record.name === input.name && record.result === 'conflict'
-      ? { ...record, resolved: true, reason: `resolved: chose ${input.source}` }
-      : record,
-  )
+  // Mark the resolution inside the last scan snapshot; the scan report itself
+  // is left untouched because it describes what that scan observed.
+  const current = metadata.get()
+  const lastScan = current.lastScan
+  if (lastScan === undefined) return
   await metadata.save({
-    ...metadata.get(),
-    records: next,
+    ...current,
+    lastScan: {
+      ...lastScan,
+      records: lastScan.records.map(record =>
+        record.name === input.name && record.result === 'conflict'
+          ? { ...record, resolved: true, reason: `resolved: chose ${input.source}` }
+          : record,
+      ),
+    },
   })
 }

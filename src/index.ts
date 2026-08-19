@@ -47,10 +47,12 @@ export function apply(ctx: any, config: Config = { autoImportOnStart: true }): v
         void runExternalImport({ ctx, metadata, dshHome })
           .then(report => {
             ctx.logger?.info?.(
-              '[dsh-skills-manager] first-run external import finished: scanned=%d imported=%d duplicates=%d conflicts=%d invalid=%d',
-              report.scanned,
-              report.imported,
-              report.duplicates,
+              '[dsh-skills-manager] first-run external import finished: candidates=%d uniqueSkills=%d inDsh=%d importedThisScan=%d duplicateCopies=%d conflicts=%d invalid=%d',
+              report.scannedCandidates,
+              report.uniqueValidSkills,
+              report.inDsh,
+              report.importedThisScan,
+              report.duplicateCopies,
               report.conflicts,
               report.invalid,
             )

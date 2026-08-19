@@ -26,18 +26,61 @@ export interface ImportReportItem {
   reason: string
   fingerprint?: string
   importedSkillId?: string
+  duplicateReason?: 'same-canonical-path' | 'same-external-fingerprint' | 'already-in-dsh'
+  groupKey?: string
+  importStatus?: 'not-needed' | 'imported' | 'failed'
 }
 
+export interface DuplicateBreakdown {
+  samePath: number
+  sameContent: number
+  alreadyInDsh: number
+}
+
+export interface DuplicateGroup {
+  key: string
+  name: string
+  fingerprint?: string
+  inDsh: boolean
+  sources: { source: string; path: string }[]
+  candidateCount: number
+  filteredCopies: number
+  importedThisScan: boolean
+}
+
+/**
+ * Import metrics. Candidate-copy metrics (`scannedCandidates`,
+ * `duplicateCopies`, `invalid`) and unique-skill metrics (`uniqueValidSkills`,
+ * `inDsh`, `importedThisScan`, `conflicts`) are different units and are not
+ * expected to sum to `scannedCandidates`.
+ */
 export interface ImportReport {
-  scanned: number
-  imported: number
-  duplicates: number
+  scannedCandidates: number
+  uniqueValidSkills: number
+  inDsh: number
+  importedThisScan: number
+  duplicateCopies: number
   conflicts: number
   invalid: number
-  skipped: number
+  failed: number
+  duplicateBreakdown: DuplicateBreakdown
+  duplicateGroups: DuplicateGroup[]
   items: ImportReportItem[]
   startedAt: string
   finishedAt: string
+}
+
+export interface DshDuplicateAudit {
+  scannedSkills: number
+  duplicateContentGroups: {
+    fingerprint: string
+    skills: { name: string; path?: string; source: string; provider: string }[]
+  }[]
+  duplicateNameGroups: {
+    name: string
+    skills: { name: string; path?: string; source: string; provider: string; fingerprint?: string }[]
+  }[]
+  checkedAt: string
 }
 
 export interface ConflictCandidate {
@@ -109,6 +152,8 @@ export interface SkillsManagerApi {
   importMeta(): Promise<{ externalImportCompleted: boolean; lastScanAt?: string; report?: ImportReport }>
   listConflicts(cwd?: string): Promise<{ conflicts: ConflictView[] }>
   resolveConflict(name: string, source: string, cwd?: string): Promise<{ resolved: string }>
+  /** On-demand diagnostics; re-fingerprints native skills, so never automatic. */
+  auditDuplicates(cwd?: string): Promise<{ audit: DshDuplicateAudit }>
 }
 
 export const skillsManagerApi: SkillsManagerApi = {
@@ -121,4 +166,5 @@ export const skillsManagerApi: SkillsManagerApi = {
   importMeta() { return call('import.meta', {}) },
   listConflicts(cwd) { return call('import.conflicts', cwd === undefined ? {} : { cwd }) },
   resolveConflict(name, source, cwd) { return call('import.resolve', { name, source, ...cwd === undefined ? {} : { cwd } }) },
+  auditDuplicates(cwd) { return call('import.audit', cwd === undefined ? {} : { cwd }) },
 }

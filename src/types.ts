@@ -33,7 +33,12 @@ export interface ExternalSkillCandidate {
   readonly fingerprint: string
 }
 
-/** Classification result for one candidate after dedup/conflict detection. */
+/**
+ * Classification of one candidate after parsing + dedup.
+ *
+ * This is deliberately NOT an import outcome: a candidate classified `new` may
+ * still fail to be written. Use `ImportStatus` for the write outcome.
+ */
 export type ImportResultType =
   | 'new'
   | 'duplicate'
@@ -41,25 +46,85 @@ export type ImportResultType =
   | 'invalid'
   | 'skipped'
 
+/** Structured reason why a candidate copy was filtered as a duplicate. */
+export type DuplicateReason =
+  | 'same-canonical-path'
+  | 'same-external-fingerprint'
+  | 'already-in-dsh'
+
+/** Whether a candidate was actually written into DSH during this scan. */
+export type ImportStatus = 'not-needed' | 'imported' | 'failed'
+
 /** One item in an import report. */
 export interface ImportReportItem {
   readonly source: ExternalSourceId
   readonly skill: string
   readonly path: string
+  /** Classification after parsing + dedup (not an import success flag). */
   readonly result: ImportResultType
   readonly reason: string
   readonly fingerprint?: string
   readonly importedSkillId?: string
+  readonly duplicateReason?: DuplicateReason
+  readonly groupKey?: string
+  /** Actual write outcome; only meaningful for `new` candidates. */
+  readonly importStatus?: ImportStatus
 }
 
-/** Aggregate import report returned to the UI. */
+/** Breakdown of why candidate copies were filtered as duplicates. */
+export interface DuplicateBreakdown {
+  readonly samePath: number
+  readonly sameContent: number
+  readonly alreadyInDsh: number
+}
+
+/** One logical external skill group shown in duplicate details. */
+export interface DuplicateGroup {
+  readonly key: string
+  readonly name: string
+  readonly fingerprint?: string
+  /** Whether this unique skill is represented in DSH after the scan. */
+  readonly inDsh: boolean
+  readonly sources: readonly {
+    readonly source: ExternalSourceId
+    readonly path: string
+  }[]
+  /** All external candidate copies observed in this logical group. */
+  readonly candidateCount: number
+  /** Candidate copies filtered by the import pipeline. */
+  readonly filteredCopies: number
+  /** Whether this scan wrote this skill into DSH. */
+  readonly importedThisScan: boolean
+}
+
+/**
+ * Aggregate import report returned to the UI.
+ *
+ * The metrics deliberately mix two units and are NOT expected to sum to
+ * `scannedCandidates`:
+ * - candidate-copy unit: `scannedCandidates`, `duplicateCopies`, `invalid`
+ * - unique-logical-skill unit: `uniqueValidSkills`, `inDsh`,
+ *   `importedThisScan`, `conflicts`, `failed`
+ */
 export interface ImportReport {
-  readonly scanned: number
-  readonly imported: number
-  readonly duplicates: number
+  /** Raw external candidates discovered this scan (candidate copies). */
+  readonly scannedCandidates: number
+  /** Unique logical skills left after parsing + external-to-external dedup. */
+  readonly uniqueValidSkills: number
+  /** Unique external skills represented in DSH once this scan finished. */
+  readonly inDsh: number
+  /** Unique skills actually written into DSH by this scan. */
+  readonly importedThisScan: number
+  /** Candidate copies filtered by the pipeline (copies, not skills). */
+  readonly duplicateCopies: number
+  /** Conflicting unique skills (same name, different content). */
   readonly conflicts: number
+  /** Unparseable candidate copies. */
   readonly invalid: number
-  readonly skipped: number
+  /** Unique skills whose import was attempted and failed. */
+  readonly failed: number
+  readonly duplicateBreakdown: DuplicateBreakdown
+  readonly duplicateGroups: readonly DuplicateGroup[]
   readonly items: readonly ImportReportItem[]
   readonly startedAt: string
   readonly finishedAt: string
@@ -76,13 +141,78 @@ export interface ImportMetadataRecord {
   readonly importedSkillId?: string
   readonly reason: string
   readonly resolved?: boolean
+  readonly duplicateReason?: DuplicateReason
+  readonly groupKey?: string
+  readonly importStatus?: ImportStatus
+}
+
+/** One complete scan snapshot persisted as Metadata V2 `lastScan`. */
+export interface SkillsManagerLastScan {
+  readonly scanId: string
+  readonly startedAt: string
+  readonly finishedAt: string
+  readonly report: ImportReport
+  readonly records: readonly ImportMetadataRecord[]
+}
+
+/** Lightweight history note: this plugin imported a skill at some point. */
+export interface ImportedSkillProvenance {
+  readonly skillName: string
+  readonly dshPath?: string
+  readonly originalFingerprint: string
+  readonly firstImportedAt: string
+  readonly lastSeenAt?: string
+  readonly sources: readonly string[]
 }
 
 /** Durable plugin metadata (no skill bodies). */
 export interface SkillsManagerMetadata {
+  readonly version: 2
   readonly externalImportCompleted: boolean
+  /** Most recent complete scan. Always replaced on the next scan. */
+  readonly lastScan?: SkillsManagerLastScan
+  /** Provenance/history only; never used to decide current DSH state. */
+  readonly importedProvenance?: readonly ImportedSkillProvenance[]
+  /** Legacy V1 records, kept only as informational migration data. */
+  readonly legacyRecords?: readonly ImportMetadataRecord[]
+  /** Legacy V1 timestamp, kept for migration display only. */
   readonly lastScanAt?: string
-  readonly records: readonly ImportMetadataRecord[]
+}
+
+/** One group of DSH native skills that share identical content. */
+export interface DshDuplicateContentGroup {
+  readonly fingerprint: string
+  readonly skills: readonly {
+    readonly name: string
+    readonly path?: string
+    readonly source: string
+    readonly provider: string
+  }[]
+}
+
+/** One group of DSH native skills that share a normalized name. */
+export interface DshDuplicateNameGroup {
+  readonly name: string
+  readonly skills: readonly {
+    readonly name: string
+    readonly path?: string
+    readonly source: string
+    readonly provider: string
+    readonly fingerprint?: string
+  }[]
+}
+
+/**
+ * Report-only diagnostics over DSH's native skills.
+ *
+ * This audit never deletes anything: identical content can be a deliberate
+ * project/global override, so the decision belongs to the user.
+ */
+export interface DshDuplicateAudit {
+  readonly scannedSkills: number
+  readonly duplicateContentGroups: readonly DshDuplicateContentGroup[]
+  readonly duplicateNameGroups: readonly DshDuplicateNameGroup[]
+  readonly checkedAt: string
 }
 
 /** A skill row returned by the management API. */

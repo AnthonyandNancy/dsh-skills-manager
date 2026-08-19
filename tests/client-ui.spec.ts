@@ -11,6 +11,29 @@ describe('Skills Manager locale', () => {
     expect(zh['text.expand']).toBe('展开')
     expect(en['text.expand']).toBe('More')
   })
+
+  it('names the summary metrics by their statistical unit', () => {
+    // "已在 DSH" must never read as "已导入": the headline number is the count
+    // of unique external skills DSH currently represents, not this scan's delta.
+    expect(zh['import.summary.scanned']).toBe('扫描候选')
+    expect(zh['import.summary.inDsh']).toBe('已在 DSH')
+    expect(zh['import.summary.deduplicated']).toBe('去重副本')
+    expect(en['import.summary.scanned']).toBe('Scanned')
+    expect(en['import.summary.inDsh']).toBe('In DSH')
+    expect(en['import.summary.deduplicated']).toBe('Deduplicated')
+    expect(zh['import.details.importedThisScan']).toBe('本次新增')
+    expect(en['import.details.importedThisScan']).toBe('Imported this scan')
+    expect(zh['import.details.uniqueValid']).toBe('唯一有效技能')
+    expect(en['import.details.uniqueValid']).toBe('Unique valid skills')
+    // The mixed-unit disclaimer keeps users from adding the cards together.
+    expect(zh['import.unitNote']).toContain('唯一技能')
+    expect(en['import.unitNote']).toContain('unique skills')
+  })
+
+  it('no longer labels any metric as a plain "imported" total', () => {
+    expect(Object.keys(zh)).not.toContain('import.summary.imported')
+    expect(Object.keys(zh)).not.toContain('import.summary.duplicates')
+  })
 })
 
 describe('ExpandableText overflow contract', () => {

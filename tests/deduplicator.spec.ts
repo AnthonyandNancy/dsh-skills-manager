@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deduplicateCandidates } from '../src/import/deduplicator.ts'
+import { buildDuplicateGroups, deduplicateCandidates } from '../src/import/deduplicator.ts'
 import type { ExternalSkillCandidate } from '../src/types.ts'
 
 function candidate(partial: Partial<ExternalSkillCandidate> & { source: ExternalSkillCandidate['source']; name: string }): ExternalSkillCandidate {
@@ -80,5 +80,54 @@ describe('deduplicator', () => {
     const second = deduplicateCandidates([a], [{ name: 'foo', fingerprint: 'same' }])
     expect(second.toImport).toHaveLength(0)
     expect(second.items[0]?.result).toBe('duplicate')
+  })
+})
+
+describe('deduplicator group metrics', () => {
+  it('counts unique logical skills, not candidate copies', () => {
+    const copies = (['claude', 'codex', 'cursor', 'gemini'] as const).map(source =>
+      candidate({ source, name: 'brainstorming', canonicalPath: `/canonical/${source}`, fingerprint: 'same' }),
+    )
+    const other = candidate({ source: 'claude', name: 'other', fingerprint: 'other-fp' })
+    const result = deduplicateCandidates([...copies, other], [])
+    expect(result.uniqueValidSkills).toBe(2)
+    expect(result.items.filter(item => item.result === 'duplicate')).toHaveLength(3)
+    expect(result.duplicateBreakdown.sameContent).toBe(3)
+    expect(result.duplicateBreakdown.samePath).toBe(0)
+  })
+
+  it('attributes duplicate reasons structurally', () => {
+    const samePath = [
+      candidate({ source: 'claude', name: 'foo', canonicalPath: '/same', fingerprint: 'fp-a' }),
+      candidate({ source: 'codex', name: 'foo', canonicalPath: '/same', fingerprint: 'fp-b' }),
+    ]
+    const result = deduplicateCandidates(samePath, [])
+    expect(result.duplicateBreakdown.samePath).toBe(1)
+    expect(result.items.find(item => item.result === 'duplicate')?.duplicateReason).toBe('same-canonical-path')
+  })
+
+  it('counts alreadyInDsh per unique skill and conflicts per name group', () => {
+    const inDsh = candidate({ source: 'claude', name: 'foo', fingerprint: 'same' })
+    const conflictA = candidate({ source: 'claude', name: 'bar', canonicalPath: '/c/a', fingerprint: 'fp-a' })
+    const conflictB = candidate({ source: 'codex', name: 'bar', canonicalPath: '/c/b', fingerprint: 'fp-b' })
+    const result = deduplicateCandidates([inDsh, conflictA, conflictB], [{ name: 'foo', fingerprint: 'same' }])
+    expect(result.alreadyInDsh).toBe(1)
+    // Two conflicting variants of one name are one conflict group.
+    expect(result.conflictGroups).toBe(1)
+    expect(result.conflicts).toHaveLength(2)
+  })
+
+  it('aggregates copies of one skill into a single duplicate group', () => {
+    const copies = (['claude', 'codex', 'cursor'] as const).map(source =>
+      candidate({ source, name: 'foo', canonicalPath: `/canonical/${source}`, fingerprint: 'same' }),
+    )
+    const result = deduplicateCandidates(copies, [])
+    const groups = buildDuplicateGroups(result.items)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.candidateCount).toBe(3)
+    expect(groups[0]?.filteredCopies).toBe(2)
+    expect(groups[0]?.sources.map(source => source.source).sort()).toEqual(['claude', 'codex', 'cursor'])
+    // Nothing was imported in this pure-dedup call.
+    expect(groups[0]?.inDsh).toBe(false)
   })
 })
