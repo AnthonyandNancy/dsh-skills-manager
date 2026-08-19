@@ -21,7 +21,7 @@ describe('scanner', () => {
       for (const id of ['claude', 'codex', 'cursor', 'gemini'] as const) {
         const root = join(dir, id)
         await mkdir(join(root, 'foo'), { recursive: true })
-        await writeFile(join(root, 'foo', 'SKILL.md'), `---\nname: foo\n---\n`)
+        await writeFile(join(root, 'foo', 'SKILL.md'), `---\nname: foo\ndescription: test skill\n---\n`)
         roots.set(id, root)
       }
       const sources = [...roots.entries()].map(([id, root]) => source(root, id as 'claude' | 'codex' | 'cursor' | 'gemini'))
@@ -51,7 +51,7 @@ describe('scanner', () => {
       await mkdir(join(root, 'bad'), { recursive: true })
       await writeFile(join(root, 'bad', 'SKILL.md'), 'not frontmatter')
       await mkdir(join(root, 'good'), { recursive: true })
-      await writeFile(join(root, 'good', 'SKILL.md'), '---\nname: good\n---\n')
+      await writeFile(join(root, 'good', 'SKILL.md'), '---\nname: good\ndescription: valid skill\n---\n')
       const result = await discoverExternalSkills([source(root, 'codex')])
       expect(result.candidates).toHaveLength(1)
       expect(result.invalid).toHaveLength(1)

@@ -1,50 +1,45 @@
 {
   "name": "dsh-skills-manager",
-  "version": "0.0.1",
-  "description": "DSH native Skills visual manager with external Agent Skills importer",
-  "private": true,
+  "version": "0.1.0",
+  "description": "A visual manager for DSH Native Skills with safe External Skills import and deduplication",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "skills",
+    "agent-skills",
+    "claude-code",
+    "codex",
+    "cursor",
+    "gemini"
+  ],
+  "license": "BSD-3-Clause",
+  "author": "Anthony and Nancy",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnthonyandNancy/dsh-skills-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AnthonyandNancy/dsh-skills-manager/issues"
+  },
+  "homepage": "https://github.com/AnthonyandNancy/dsh-skills-manager#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/types/index.d.ts",
   "files": [
-    "lib"
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
   ],
-  "license": "BSD-3-Clause",
-  "peerDependencies": {
-    "@deepseek-ai/dsh-client-runtime": ">=0.0.1-rc <2",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.0.1-rc <2",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc <2",
-    "@deepseek-ai/dsh-host-webserver": ">=0.0.1-rc <2",
-    "@deepseek-ai/dsh-settings": ">=0.0.1-rc <2",
-    "@deepseek-ai/dsh-skill": ">=0.0.1-rc <2",
-    "cordis": ">=4.0.0-rc <5",
-    "react": "^18.2.0"
-  },
-  "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-host-webserver": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-settings": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "~18.3.0",
-    "jsdom": "^29.1.1",
-    "react-dom": "^18.2.0",
-    "tsdown": "^0.22.14",
-    "typescript": "^5.9.0",
-    "vitest": "^3.2.4"
-  },
-  "scripts": {
-    "build": "bash scripts/build.sh",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
-    "build:client": "tsdown",
-    "test": "vitest run"
-  },
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
@@ -54,16 +49,70 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-settings"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-locale"
       ],
       "platform": "web"
     }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc <5",
+    "@deepseek-ai/schemastery": ">=3.0.0 <4",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-settings": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-skill": ">=0.1.0-rc <2",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-host-webserver": { "optional": true },
+    "@deepseek-ai/dsh-settings": { "optional": true }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc <5",
+    "@deepseek-ai/schemastery": ">=3.0.0 <4",
+    "@deepseek-ai/dsh-client-locale": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-settings": ">=0.1.0-rc <2",
+    "@deepseek-ai/dsh-skill": ">=0.1.0-rc <2",
+    "@types/node": "^24.13.3",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "jsdom": "^29.1.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.4"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
+    "test": "vitest run",
+    "build:host": "node scripts/build-host.mjs",
+    "build:client": "npm run typecheck:client && tsc -p tsconfig.client.build.json && tsdown",
+    "build": "npm run clean && npm run build:host && npm run build:client",
+    "pack:check": "node scripts/pack-check.mjs",
+    "prepack": "npm run build && npm run pack:check"
   }
 }

@@ -19,7 +19,7 @@ fi
 
 # Without a checkout, build with the locally installed dev toolchain when the
 # host dependencies (schemastery) are already available in node_modules.
-if [ -z "$CHECKOUT" ] && [ -f "$LOCAL_TSC" ] && [ -d "$ROOT/node_modules/schemastery" ]; then
+if [ -z "$CHECKOUT" ] && [ -f "$LOCAL_TSC" ] && { [ -d "$ROOT/node_modules/schemastery" ] || [ -d "$ROOT/node_modules/@deepseek-ai/schemastery" ]; }; then
   echo "=== Building with local dev toolchain (no DSH_CHECKOUT) ==="
   "$LOCAL_TSC" -p tsconfig.json
   echo "=== Build complete ==="
@@ -75,9 +75,17 @@ link_pkg @deepseek-ai/dsh-settings packages/settings/settings
 link_pkg @deepseek-ai/dsh-host-webserver packages/host/webserver
 link_pkg @deepseek-ai/dsh-scope packages/core/scope
 link_pkg @deepseek-ai/dsh-invariants packages/runtime-diagnostics/invariants
+link_pkg @deepseek-ai/dsh-client-locale packages/client/locale
+link_pkg @deepseek-ai/dsh-client-runtime packages/client/runtime
+link_pkg @deepseek-ai/dsh-client-ui-primitives packages/client/ui-primitives
+link_pkg @deepseek-ai/dsh-client-ui-settings packages/client/ui-settings
+link_pkg @deepseek-ai/dsh-client-ui-slots packages/client/ui-slots
+link_pkg @deepseek-ai/dsh-client-web-react packages/client/web-react
 link_pkg @deepseek-ai/dsh-brand packages/util/brand
 # @types/node（编译类型；checkout 自带）
 link_pkg @types/node node_modules/@types/node
+# The browser client imports the same platform names as the DSH ModuleLoader.
+
 
 STD_SCHEMA=$(find "$CHECKOUT/node_modules/.pnpm" -maxdepth 1 -type d -iname '@standard-schema+spec@*' 2>/dev/null | head -1)
 if [ -n "$STD_SCHEMA" ]; then

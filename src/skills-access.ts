@@ -19,7 +19,7 @@ export async function createSkillAccess(ctx: { get?: (name: string) => any }): P
   const live = first === undefined ? undefined : ctx.get?.('agents')?.get?.(first.id)
   const presets = ctx.get?.('agentPresets')
   const scoped = live === undefined ? undefined : presets?.serviceFor?.(live, 'skills')
-  const skills = scoped ?? ctx.get?.('skills')
+  const skills = scoped ?? ctx.get?.('skills') ?? (ctx as { skills?: any }).skills
   if (skills === undefined) throw new Error('DSH skills service is not available')
 
   let scope: unknown = live

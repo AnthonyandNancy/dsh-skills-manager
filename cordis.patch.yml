@@ -1,0 +1,4 @@
+# dsh-skills-manager adds the visual Skills manager and external import UI.
+- insert:
+    - id: dsh-skills-manager
+      name: dsh-skills-manager

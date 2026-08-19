@@ -8,7 +8,7 @@
  * plugin functional for the current process.
  */
 
-import z from 'schemastery'
+import z from '@deepseek-ai/schemastery'
 import type { ImportMetadataRecord, SkillsManagerMetadata } from './types.ts'
 
 export const SKILLS_MANAGER_NS = 'skills-manager'

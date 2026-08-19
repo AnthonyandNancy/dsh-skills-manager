@@ -12,7 +12,7 @@
  * reads through `ctx.skills` and writes into DSH-managed skill directories.
  */
 
-import z from 'schemastery'
+import z from '@deepseek-ai/schemastery'
 import { createMetadataStore } from './storage.ts'
 import { installRoutes } from './routes.ts'
 import { runExternalImport } from './import/importer.ts'

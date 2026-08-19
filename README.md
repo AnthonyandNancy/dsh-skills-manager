@@ -1,40 +1,103 @@
 # dsh-skills-manager
 
-DSH native Skills visual manager with an external Agent Skills importer.
+English | [简体中文](README.zh.md)
 
-This plugin adds a **Settings → Skills** tab that Views, Searches, Creates, Edits and Deletes DSH native Skills through DSH's official Skills service. It also performs a one-time scan of common external Agent Skills libraries (Claude Code, OpenAI Codex, Cursor, Gemini CLI) and imports them into DSH's managed `$DSH_HOME/skills` directory.
-
-The plugin deliberately does **not** reimplement DSH's Skill Registry, Loader, Runtime, Context Injector, Catalog, Progressive Disclosure, Cache, or Watcher. It only reads through `ctx.skills` (with the same agent-preset scope used by DSH's `/api/skill.list`) and writes into DSH-managed skill directories.
+`dsh-skills-manager` is a visual manager for **DSH Native Skills**. It keeps DSH's native Skill Registry, Loader, Runtime, discovery, progressive loading, and context injection as the source of truth. The plugin adds a Settings surface and a first-run External Skills import pipeline with safe deduplication; it does not implement a second Skills runtime.
 
 ## Features
 
-- `Settings → Skills` UI (search / view / new / edit / delete)
-- External import pipeline: `scan → normalize → deduplicate → conflict detect → import`
-- Three-layer dedup: canonical realpath, deterministic content fingerprint, name conflict
-- Never auto-overwrites DSH existing skills; never deletes external source files
-- Idempotent re-runs
-- Thin same-origin JSON API: `POST /skills-manager/api/*`
+- Settings → Skills: search, view, create, edit, and delete DSH Native Skills.
+- External Skills Import for Claude Code, OpenAI Codex, Cursor, and Gemini CLI.
+- Canonical-path, content-fingerprint, and name-conflict deduplication.
+- No overwrite of existing DSH skills and no modification of external source files.
+- Bilingual UI that follows DSH's native Locale Runtime without a page reload.
+- Responsive table with visual two-line Description clamping, per-row expansion, path tooltips, and a compact Actions menu.
+
+## Screenshots
+
+The main surface is the DSH Settings → Skills page. It contains a title row, a wrapped search/import toolbar, an adaptive import summary, and a fixed-layout Skills table designed for narrow Settings panels.
+
+## Requirements
+
+- DSH with the current web client Locale, Settings Slots, UI Primitives, and Client Modules packages.
+- Node.js 20 or newer.
+- A DSH Web profile with the native Skills service available.
+
+## Installation
+
+Install the published Bundle into a profile:
+
+```bash
+dsh plugin add dsh-skills-manager
+```
+
+For a separate verification profile:
+
+```bash
+dsh plugin --profile skills-test add dsh-skills-manager
+dsh --profile skills-test --dump-config
+```
+
+The package declares `dsh.bundle` and ships `cordis.patch.yml`. DSH adds the bundle layer automatically and activates the Host plugin plus its browser client entry; no manual edit to `~/.dsh/cordis.patch.yml` is required.
+
+## Usage
+
+Open DSH Web and choose Settings → Skills. The navigation label follows the active DSH language: `技能` in Chinese and `Skills` in English. Changing Settings → Language updates the plugin UI live.
+
+Descriptions are clamped to two visual lines. A More/展开 control appears only when the rendered text overflows; each row expands and collapses independently. Long paths stay ellipsized and are available through hover/focus tooltip text.
+
+## External Skills Import
+
+The first Host initialization can scan the supported external skill roots. The UI also provides Scan External Skills and a conflict-resolution page. Import is intentionally explicit about conflict handling and only writes DSH-managed skill directories.
+
+## Deduplication
+
+Import classification uses three layers:
+
+1. Canonical real path prevents the same source from being scanned twice.
+2. Deterministic content fingerprints identify identical Skills from different roots.
+3. Name conflicts are surfaced instead of silently overwriting a DSH-managed Skill.
+
+## Safety
+
+The plugin delegates all runtime behavior to DSH Native Skills. It does not replace the registry, loader, runtime, discovery, progressive loading, or context injection. Delete and import operations are fenced to DSH-managed roots; external source files are never deleted or overwritten. No npm `postinstall` hook scans Skills.
+
+## Development
+
+This repository contains the Host entry in `src/index.ts` and the DSH ModuleLoader client entry in `src/client/index.ts`. A local DSH checkout can be selected with `DSH_CHECKOUT` for the build helper:
+
+```bash
+DSH_CHECKOUT=/path/to/deepseek-harness bash scripts/build.sh
+```
 
 ## Build
 
 ```bash
-npm install   # or pnpm install (dev-only)
 pnpm run typecheck
 pnpm run typecheck:client
 pnpm run test
-pnpm run build:client
-pnpm exec tsc -p tsconfig.json
+pnpm run build
+pnpm pack
 ```
 
-Or use the DSH plugin build helper:
+`prepack` builds both Host and Client artifacts and checks the Bundle metadata. The published tarball contains prebuilt `lib/index.js`, `lib/client.js`, declarations, `cordis.patch.yml`, both READMEs, and `LICENSE`.
+
+## Publish
+
+After updating the version and verifying the tarball:
 
 ```bash
-DSH_CHECKOUT=<checkout> bash scripts/build.sh
+npm pack
+npm publish
 ```
 
-## API
+The client build remains a CJS closure factory that calls `window.__ModuleLoader__.load({ id: 'dsh-skills-manager', factory })`; it is not converted to a standalone browser ESM bundle.
 
-All routes require a same-origin POST.
+## Compatibility
 
-- `skills.list` / `skills.get` / `skills.create` / `skills.update` / `skills.delete`
-- `import.scan` / `import.meta` / `import.conflicts` / `import.resolve`
+The package targets DSH `0.1.0-rc` or later within the declared peer ranges, and React 18. It uses the current DSH Locale Runtime (`ctx.locale.register`, `ctx.locale.bind`, and the locale-aware settings section slot), the current UI Primitives (`Button`, `Input`, `Menu`, and `Tooltip`), and the current Bundle patch contract.
+
+## License
+
+BSD-3-Clause. See [LICENSE](LICENSE).
+

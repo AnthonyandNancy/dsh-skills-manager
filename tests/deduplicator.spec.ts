@@ -41,8 +41,8 @@ describe('deduplicator', () => {
   })
 
   it('Case 4: same name different content -> conflict, no import', () => {
-    const a = candidate({ source: 'claude', name: 'foo', fingerprint: 'fp-a' })
-    const b = candidate({ source: 'codex', name: 'foo', fingerprint: 'fp-b' })
+    const a = candidate({ source: 'claude', name: 'foo', canonicalPath: '/canonical/a', fingerprint: 'fp-a' })
+    const b = candidate({ source: 'codex', name: 'foo', canonicalPath: '/canonical/b', fingerprint: 'fp-b' })
     const result = deduplicateCandidates([a, b], [])
     expect(result.toImport).toHaveLength(0)
     expect(result.conflicts).toHaveLength(2)
@@ -65,8 +65,8 @@ describe('deduplicator', () => {
   })
 
   it('Case 7: same SKILL.md but different scripts -> different fingerprints -> conflict when same name', () => {
-    const a = candidate({ source: 'claude', name: 'foo', fingerprint: 'fp-a' })
-    const b = candidate({ source: 'codex', name: 'foo', fingerprint: 'fp-b' })
+    const a = candidate({ source: 'claude', name: 'foo', canonicalPath: '/canonical/a', fingerprint: 'fp-a' })
+    const b = candidate({ source: 'codex', name: 'foo', canonicalPath: '/canonical/b', fingerprint: 'fp-b' })
     const result = deduplicateCandidates([a, b], [])
     expect(result.toImport).toHaveLength(0)
     expect(result.conflicts).toHaveLength(2)
