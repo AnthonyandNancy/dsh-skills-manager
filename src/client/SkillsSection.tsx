@@ -1,119 +1,35 @@
-/**
- * Settings → Skills section.
- *
- * This UI is a viewer/editor over DSH's native Skills API. It never keeps a
- * second skill store: every mutation goes through the host API, which reads
- * `ctx.skills` and writes DSH-managed skill directories.
- */
+/** Settings → Skills management surface over DSH's native Skills API. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { CSSProperties, ReactElement } from 'react'
-import { Button, Input, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ReactElement } from 'react'
+import { Button, Input, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import type {
-  ConflictView,
-  ImportReport,
-  ManagedSkillDetail,
-  ManagedSkillRow,
-  SkillsManagerApi,
-} from './api.ts'
+import type { ConflictView, ImportReport, ManagedSkillDetail, ManagedSkillRow, SkillsManagerApi } from './api.ts'
+import { ExternalImportView } from './ExternalImportView.tsx'
+import { SkillEditor, EMPTY_DRAFT, type EditorDraft } from './SkillEditor.tsx'
 import { ExpandableText } from './ExpandableText.tsx'
 import { SkillActions } from './SkillActions.tsx'
-import { SKILLS_MANAGER_NS, type SkillsManagerKey } from './locale.ts'
+import { canOpenSkillsDirectory, openSkillsDirectory as openFixedSkillsDirectory } from './open-skills-folder.ts'
+import { SKILLS_MANAGER_NS } from './locale.ts'
+import styles from './SkillsSection.module.css'
+import table from './SkillsTable.module.css'
 
 export interface SkillsSectionInjected {
   api: SkillsManagerApi
-  remote?: {
-    $on?: (event: string, listener: () => void) => () => void
-  }
+  connection?: ConnectionHandle
+  remote?: { $on?: (event: string, listener: () => void) => () => void }
 }
 
 export interface SkillsSectionProps extends SkillsSectionInjected {
-  /** Owner-provided close affordance from the settings section slot. */
   close: () => void
-  /** Framework-provided translation seat for the registered namespace. */
   t: TranslateNS<typeof SKILLS_MANAGER_NS>
 }
 
 type Mode = 'list' | 'detail' | 'create' | 'edit' | 'import' | 'conflicts'
 
-type EditorDraft = {
-  name: string
-  description: string
-  whenToUse: string
-  body: string
-  scope: 'global' | 'project'
-}
-
-const EMPTY_DRAFT: EditorDraft = { name: '', description: '', whenToUse: '', body: '', scope: 'global' }
-
-const styles: Record<string, CSSProperties> = {
-  root: {
-    width: '100%',
-    minWidth: 0,
-    maxWidth: '100%',
-    boxSizing: 'border-box',
-    padding: '16px',
-  },
-  titleRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-    minWidth: 0,
-    marginBottom: '10px',
-  },
-  toolbarRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-    minWidth: 0,
-    marginBottom: '12px',
-  },
-  title: { margin: 0, minWidth: 0, fontSize: '18px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' },
-  search: { flex: '1 1 240px', minWidth: '180px', maxWidth: '100%' },
-  button: { whiteSpace: 'nowrap', flex: '0 0 auto' },
-  dangerButton: { whiteSpace: 'nowrap', flex: '0 0 auto', background: 'var(--dsw-alias-button-danger-fill, #dc2626)', borderColor: 'var(--dsw-alias-button-danger-border, #dc2626)', color: '#fff' },
-  panel: { border: '1px solid var(--dsw-alias-border, #e5e7eb)', borderRadius: '8px', padding: '12px', marginBottom: '12px', background: 'var(--dsw-alias-bg-secondary, #fafafa)', minWidth: 0, boxSizing: 'border-box' },
-  tableContainer: { width: '100%', minWidth: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
-  table: { width: '100%', minWidth: 0, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: '14px' },
-  th: { textAlign: 'left', padding: '8px', borderBottom: '1px solid var(--dsw-alias-border, #e5e7eb)', overflow: 'hidden', textOverflow: 'ellipsis' },
-  td: { padding: '8px', borderBottom: '1px solid var(--dsw-alias-border-subtle, #f3f4f6)', verticalAlign: 'top', minWidth: 0, overflow: 'hidden' },
-  cellText: { minWidth: 0, maxWidth: '100%', overflow: 'hidden' },
-  name: { display: 'block', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  location: { display: 'block', minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'help' },
-  actions: { whiteSpace: 'nowrap', width: '1%', textAlign: 'right' },
-  error: { color: 'var(--dsw-alias-text-error, #b91c1c)', padding: '8px', background: 'var(--dsw-alias-bg-error, #fee2e2)', borderRadius: '6px', marginBottom: '8px', overflowWrap: 'anywhere' },
-  info: { color: 'var(--dsw-alias-text-secondary, #1f2937)', padding: '8px', background: 'var(--dsw-alias-bg-secondary, #e5e7eb)', borderRadius: '6px', marginBottom: '8px' },
-  form: { display: 'grid', gap: '10px', marginTop: '8px' },
-  label: { display: 'grid', gap: '5px', fontWeight: 500 },
-  input: { padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--dsw-alias-border, #ccc)', width: '100%', minWidth: 0, boxSizing: 'border-box' },
-  textarea: { padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--dsw-alias-border, #ccc)', width: '100%', minWidth: 0, minHeight: '120px', boxSizing: 'border-box', fontFamily: 'monospace' },
-  pre: { background: '#0f172a', color: '#e2e8f0', padding: '12px', borderRadius: '8px', overflow: 'auto', maxHeight: '400px', fontSize: '13px', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
-  modalBackdrop: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px', boxSizing: 'border-box' },
-  modal: { background: 'var(--dsw-alias-bg-primary, #fff)', borderRadius: '10px', padding: '16px', width: 'min(640px, 100%)', maxHeight: '85vh', overflow: 'auto', boxSizing: 'border-box' },
-  summary: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '10px', marginBottom: '8px' },
-  summaryItem: { display: 'grid', gap: '2px', minWidth: 0 },
-  summaryNumber: { fontSize: '20px', fontWeight: 700 },
-  summaryLabel: { fontSize: '12px', color: 'var(--dsw-alias-text-secondary, #6b7280)', overflow: 'hidden', textOverflow: 'ellipsis' },
-  lastScan: { fontSize: '11px', color: 'var(--dsw-alias-text-tertiary, #9ca3af)', marginBottom: '4px' },
-  detailsTitle: { fontSize: '13px', fontWeight: 600, margin: '12px 0 6px' },
-  metrics: { display: 'grid', gap: '2px', maxWidth: '360px' },
-  metricRow: { display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px' },
-  metricLabel: { color: 'var(--dsw-alias-text-secondary, #6b7280)', minWidth: 0 },
-  metricLabelStrong: { fontWeight: 600, minWidth: 0, borderTop: '1px solid var(--dsw-alias-border, #e5e7eb)', paddingTop: '2px' },
-  metricValue: { fontVariantNumeric: 'tabular-nums' },
-  metricValueStrong: { fontVariantNumeric: 'tabular-nums', fontWeight: 600, borderTop: '1px solid var(--dsw-alias-border, #e5e7eb)', paddingTop: '2px' },
-  note: { fontSize: '12px', color: 'var(--dsw-alias-text-secondary, #6b7280)', margin: '8px 0 0', overflowWrap: 'anywhere' },
-  groupList: { margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '8px' },
-  groupItem: { border: '1px solid var(--dsw-alias-border-subtle, #f3f4f6)', borderRadius: '6px', padding: '8px', fontSize: '13px', minWidth: 0, overflowWrap: 'anywhere' },
-  groupMeta: { fontSize: '12px', color: 'var(--dsw-alias-text-secondary, #6b7280)' },
-  list: { margin: 0, paddingLeft: '18px', fontSize: '13px', overflowWrap: 'anywhere' },
-}
-
 export function SkillsSection(props: SkillsSectionProps): ReactElement {
-  const { api, remote, t } = props
+  const { api, connection, remote, t } = props
   const [skills, setSkills] = useState<ManagedSkillRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
@@ -125,29 +41,28 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
   const [conflicts, setConflicts] = useState<ConflictView[]>([])
   const [deleteTarget, setDeleteTarget] = useState<ManagedSkillRow | undefined>()
   const [busy, setBusy] = useState(false)
+  const [hostDescription, setHostDescription] = useState(() => connection?.hostDescription.getSnapshot())
+
+  useEffect(() => {
+    if (connection === undefined) {
+      setHostDescription(undefined)
+      return
+    }
+    setHostDescription(connection.hostDescription.getSnapshot())
+    return connection.hostDescription.subscribe(() => setHostDescription(connection.hostDescription.getSnapshot()))
+  }, [connection])
 
   const loadSkills = useCallback(async () => {
     try {
-      const result = await api.listSkills()
-      setSkills(result.skills)
+      setSkills((await api.listSkills()).skills)
     } catch (err) {
       setError(formatError(t, 'errors.load', err))
     }
   }, [api, t])
 
-  const loadMeta = useCallback(async () => {
-    try {
-      const result = await api.importMeta()
-      setReport(result.report)
-    } catch {
-      // Meta is optional; the table is the primary surface.
-    }
-  }, [api])
-
   const loadConflicts = useCallback(async () => {
     try {
-      const result = await api.listConflicts()
-      setConflicts(result.conflicts)
+      setConflicts((await api.listConflicts()).conflicts)
     } catch {
       setConflicts([])
     }
@@ -156,9 +71,9 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(undefined)
-    await Promise.all([loadSkills(), loadMeta(), loadConflicts()])
+    await Promise.all([loadSkills(), loadConflicts()])
     setLoading(false)
-  }, [loadSkills, loadMeta, loadConflicts])
+  }, [loadConflicts, loadSkills])
 
   useEffect(() => { void refresh() }, [refresh])
 
@@ -169,17 +84,15 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
   }, [remote, refresh])
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (q.length === 0) return skills
-    return skills.filter(skill =>
-      skill.name.toLowerCase().includes(q) || skill.description.toLowerCase().includes(q),
-    )
-  }, [skills, search])
+    const query = search.trim().toLowerCase()
+    return query.length === 0
+      ? skills
+      : skills.filter(skill => skill.name.toLowerCase().includes(query) || skill.description.toLowerCase().includes(query))
+  }, [search, skills])
 
   const openDetail = useCallback(async (skill: ManagedSkillRow) => {
     try {
-      const result = await api.getSkill(skill.name)
-      setSelected(result.skill)
+      setSelected((await api.getSkill(skill.name)).skill)
       setMode('detail')
     } catch (err) {
       setError(formatError(t, 'errors.get', err))
@@ -188,14 +101,14 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
 
   const openEdit = useCallback(async (skill: ManagedSkillRow | ManagedSkillDetail) => {
     try {
-      const result = 'content' in skill ? { skill } : await api.getSkill(skill.name)
-      setSelected(result.skill)
+      const detail = 'content' in skill ? skill : (await api.getSkill(skill.name)).skill
+      setSelected(detail)
       setDraft({
-        name: result.skill.name,
-        description: result.skill.description,
-        whenToUse: result.skill.whenToUse ?? '',
-        body: result.skill.content,
-        scope: 'global',
+        name: detail.name,
+        description: detail.description,
+        whenToUse: detail.whenToUse ?? '',
+        body: detail.content,
+        scope: detail.source.includes('project') ? 'project' : 'global',
       })
       setMode('edit')
     } catch (err) {
@@ -205,6 +118,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
 
   const openCreate = useCallback(() => {
     setDraft(EMPTY_DRAFT)
+    setSelected(undefined)
     setMode('create')
   }, [])
 
@@ -213,20 +127,9 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
     setError(undefined)
     try {
       if (mode === 'create') {
-        await api.createSkill({
-          name: draft.name,
-          description: draft.description,
-          whenToUse: draft.whenToUse,
-          body: draft.body,
-          scope: draft.scope,
-        })
+        await api.createSkill({ name: draft.name, description: draft.description, whenToUse: draft.whenToUse, body: draft.body, scope: draft.scope })
       } else if (mode === 'edit' && selected !== undefined) {
-        await api.updateSkill({
-          name: selected.name,
-          description: draft.description,
-          whenToUse: draft.whenToUse,
-          body: draft.body,
-        })
+        await api.updateSkill({ name: selected.name, description: draft.description, whenToUse: draft.whenToUse, body: draft.body })
       }
       setMode('list')
       await refresh()
@@ -256,8 +159,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
     setBusy(true)
     setError(undefined)
     try {
-      const result = await api.scanExternal()
-      setReport(result.report)
+      setReport((await api.scanExternal()).report)
       setMode('import')
       await refresh()
     } catch (err) {
@@ -281,126 +183,63 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
     }
   }, [api, refresh, t])
 
+  const openSkillsDirectory = useCallback(async () => {
+    if (connection === undefined || !connection.isLoopback || hostDescription?.canOpenPath !== true) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      await openFixedSkillsDirectory(api, connection)
+    } catch (err) {
+      setError(formatError(t, 'errors.openSkillsDirectory', err))
+    } finally {
+      setBusy(false)
+    }
+  }, [api, connection, hostDescription?.canOpenPath, t])
+
+  const canOpenFolder = canOpenSkillsDirectory(connection, hostDescription)
+  const unavailableLabel = t('toolbar.openSkillsFolderUnavailable')
+
   if (mode === 'detail' && selected !== undefined) {
     return (
-      <div style={styles.root}>
+      <div className={styles.page}>
         <TitleRow title={selected.name}>
-          <Button variant="ghost" size="sm" style={styles.button} onClick={() => setMode('list')}>{t('detail.back')}</Button>
-          <Button variant="primary" size="sm" style={styles.button} onClick={() => { void openEdit(selected) }}>{t('detail.edit')}</Button>
+          <Button variant="ghost" size="sm" onClick={() => setMode('list')}>{t('detail.back')}</Button>
+          <Button variant="primary" size="sm" onClick={() => { void openEdit(selected) }}>{t('detail.edit')}</Button>
         </TitleRow>
-        {error !== undefined ? <div style={styles.error}>{error}</div> : null}
-        <div style={styles.panel}>
+        {error !== undefined ? <div className={styles.error} role="alert">{error}</div> : null}
+        <section className={styles.importSection}>
           <p><strong>{t('detail.description')}:</strong> {selected.description}</p>
           {selected.whenToUse !== undefined ? <p><strong>{t('detail.whenToUse')}:</strong> {selected.whenToUse}</p> : null}
           <p><strong>{t('detail.source')}:</strong> {selected.source} · <strong>{t('detail.provider')}:</strong> {selected.provider}</p>
           {selected.path !== undefined ? <p><strong>{t('detail.location')}:</strong> <LocationValue path={selected.path} t={t} /></p> : null}
           <p><strong>{t('detail.modelInvocable')}:</strong> {selected.modelInvocable ? t('status.yes') : t('status.no')} · <strong>{t('detail.userInvocable')}:</strong> {selected.userInvocable ? t('status.yes') : t('status.no')}</p>
-          <pre style={styles.pre}>{selected.content}</pre>
-        </div>
+          <pre className={styles.codeBlock}>{selected.content}</pre>
+        </section>
       </div>
     )
   }
 
   if (mode === 'create' || mode === 'edit') {
-    return (
-      <div style={styles.root}>
-        <TitleRow title={mode === 'create' ? t('editor.newTitle') : t('editor.editTitle', { name: selected?.name ?? '' })}>
-          <Button variant="ghost" size="sm" style={styles.button} onClick={() => setMode('list')}>{t('editor.cancel')}</Button>
-          <Button variant="primary" size="sm" style={styles.button} disabled={busy} onClick={() => { void save() }}>{t('editor.save')}</Button>
-        </TitleRow>
-        {error !== undefined ? <div style={styles.error}>{error}</div> : null}
-        <div style={styles.form}>
-          <label style={styles.label}>
-            {t('editor.name')}
-            <input
-              style={styles.input}
-              value={draft.name}
-              disabled={mode === 'edit'}
-              onChange={event => setDraft({ ...draft, name: event.target.value })}
-              placeholder={t('editor.namePlaceholder')}
-            />
-          </label>
-          {mode === 'create' ? (
-            <label style={styles.label}>
-              {t('editor.scope')}
-              <select
-                style={styles.input}
-                value={draft.scope}
-                onChange={event => setDraft({ ...draft, scope: event.target.value as 'global' | 'project' })}
-              >
-                <option value="global">{t('editor.global')}</option>
-                <option value="project">{t('editor.project')}</option>
-              </select>
-            </label>
-          ) : null}
-          <label style={styles.label}>
-            {t('editor.description')}
-            <textarea
-              style={styles.textarea}
-              value={draft.description}
-              onChange={event => setDraft({ ...draft, description: event.target.value })}
-            />
-          </label>
-          <label style={styles.label}>
-            {t('editor.whenToUse')}
-            <input
-              style={styles.input}
-              value={draft.whenToUse}
-              onChange={event => setDraft({ ...draft, whenToUse: event.target.value })}
-            />
-          </label>
-          <label style={styles.label}>
-            {t('editor.body')}
-            <textarea
-              style={{ ...styles.textarea, minHeight: '220px' }}
-              value={draft.body}
-              onChange={event => setDraft({ ...draft, body: event.target.value })}
-            />
-          </label>
-        </div>
-      </div>
-    )
+    return <SkillEditor mode={mode} draft={draft} setDraft={setDraft} selectedName={selected?.name} busy={busy} error={error} onCancel={() => setMode('list')} onSave={() => { void save() }} t={t} />
   }
 
   if (mode === 'import' && report !== undefined) {
-    return (
-      <div style={styles.root}>
-        <TitleRow title={t('import.title')}>
-          <Button variant="ghost" size="sm" style={styles.button} onClick={() => setMode('list')}>{t('import.back')}</Button>
-          <Button variant="primary" size="sm" style={styles.button} disabled={busy} onClick={() => { void scan() }}>{t('import.scanAgain')}</Button>
-        </TitleRow>
-        {error !== undefined ? <div style={styles.error}>{error}</div> : null}
-        <ImportReportView report={report} t={t} />
-      </div>
-    )
+    return <ExternalImportView report={report} busy={busy} onBack={() => setMode('list')} onScanAgain={() => { void scan() }} t={t} />
   }
 
   if (mode === 'conflicts') {
     return (
-      <div style={styles.root}>
-        <TitleRow title={t('import.conflictsTitle')}>
-          <Button variant="ghost" size="sm" style={styles.button} onClick={() => setMode('list')}>{t('import.back')}</Button>
-        </TitleRow>
-        {error !== undefined ? <div style={styles.error}>{error}</div> : null}
-        {conflicts.length === 0 ? <div style={styles.info}>{t('import.noPendingConflicts')}</div> : (
-          <div style={styles.panel}>
+      <div className={styles.page}>
+        <TitleRow title={t('import.conflictsTitle')}><Button variant="ghost" size="sm" onClick={() => setMode('list')}>{t('import.back')}</Button></TitleRow>
+        {error !== undefined ? <div className={styles.error} role="alert">{error}</div> : null}
+        {conflicts.length === 0 ? <div className={styles.info}>{t('import.noPendingConflicts')}</div> : (
+          <div className={styles.groupList}>
             {conflicts.map(conflict => (
-              <div key={conflict.name} style={{ marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+              <div key={conflict.name} className={styles.groupRow}>
                 <strong>{conflict.name}</strong>
-                <p style={{ fontSize: '13px', color: '#6b7280', margin: '4px 0', overflowWrap: 'anywhere' }}>{conflict.reason}</p>
-                {conflict.existing !== undefined ? <p style={{ fontSize: '13px' }}><strong>{t('import.dshExisting')}:</strong> {conflict.existing.path ?? conflict.existing.name}</p> : null}
-                {conflict.candidates.map(candidate => (
-                  <Button
-                    key={candidate.source}
-                    variant="outline"
-                    size="sm"
-                    style={{ ...styles.button, marginTop: '6px', marginRight: '6px' }}
-                    disabled={busy}
-                    onClick={() => { void resolve(conflict, candidate.source) }}
-                  >
-                    {t('import.use', { label: candidate.label })}
-                  </Button>
-                ))}
+                <span className={styles.groupMeta}>{conflict.reason}</span>
+                {conflict.existing !== undefined ? <span className={styles.groupMeta}><strong>{t('import.dshExisting')}:</strong> {conflict.existing.path ?? conflict.existing.name}</span> : null}
+                <div className={styles.titleActions}>{conflict.candidates.map(candidate => <Button key={candidate.source} variant="outline" size="sm" disabled={busy} onClick={() => { void resolve(conflict, candidate.source) }}>{t('import.use', { label: candidate.label })}</Button>)}</div>
               </div>
             ))}
           </div>
@@ -410,250 +249,80 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
   }
 
   return (
-    <div style={styles.root}>
-      <div style={styles.titleRow}>
-        <h2 style={styles.title}>{t('nav.title')}</h2>
-        <Button variant="primary" size="sm" style={styles.button} onClick={openCreate}>{t('toolbar.newSkill')}</Button>
-      </div>
-      <div style={styles.toolbarRow}>
-        <Input
-          style={styles.search}
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-          placeholder={t('toolbar.searchPlaceholder')}
-          aria-label={t('toolbar.searchPlaceholder')}
-        />
-        <Button variant="outline" size="sm" style={styles.button} disabled={busy} onClick={() => setMode('conflicts')}>
-          {t('toolbar.conflicts')} ({conflicts.length})
-        </Button>
-        <Button variant="outline" size="sm" style={styles.button} disabled={busy} onClick={() => { void scan() }}>{t('toolbar.scanExternal')}</Button>
-      </div>
-
-      {error !== undefined ? <div style={styles.error}>{error}</div> : null}
-      {loading ? <div style={styles.info}>{t('status.loading')}</div> : null}
-
-      {report !== undefined ? (
-        <div style={styles.panel}>
-          <ImportSummary report={report} t={t} />
-          <Button variant="ghost" size="sm" style={styles.button} onClick={() => setMode('import')}>{t('import.viewDetails')}</Button>
+    <div className={`${styles.page} ${styles.listPage}`}>
+      <div className={styles.titleRow}>
+        <h2 className={styles.pageTitle}>{t('nav.title')}</h2>
+        <div className={styles.titleActions}>
+          <Tooltip label={unavailableLabel} side="top" disabled={canOpenFolder}>
+            <span>
+              <Button variant="outline" size="sm" disabled={!canOpenFolder || busy} onClick={() => { void openSkillsDirectory() }} title={!canOpenFolder ? unavailableLabel : undefined}>{t('toolbar.openSkillsFolder')}</Button>
+            </span>
+          </Tooltip>
+          <Button variant="primary" size="sm" disabled={busy} onClick={openCreate}>{t('toolbar.newSkill')}</Button>
         </div>
-      ) : null}
-
-      <div style={styles.tableContainer}>
-        <table style={styles.table}>
-          <colgroup>
-            <col style={{ width: '18%' }} />
-            <col style={{ width: '34%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '24%' }} />
-            <col style={{ width: '12%' }} />
-          </colgroup>
+      </div>
+      <div className={styles.toolbar}>
+        <Input className={styles.search} value={search} onChange={event => setSearch(event.target.value)} placeholder={t('toolbar.searchPlaceholder')} aria-label={t('toolbar.searchPlaceholder')} />
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => setMode('conflicts')}>{t('toolbar.conflicts')} ({conflicts.length})</Button>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => { void scan() }}>{t('toolbar.scanExternal')}</Button>
+      </div>
+      {error !== undefined ? <div className={styles.error} role="alert">{error}</div> : null}
+      {loading ? <div className={styles.info}>{t('status.loading')}</div> : null}
+      <div className={table.viewport}>
+        <table className={table.table}>
           <thead>
             <tr>
-              <th style={styles.th}>{t('table.name')}</th>
-              <th style={styles.th}>{t('table.description')}</th>
-              <th style={styles.th}>{t('table.scope')}</th>
-              <th style={styles.th}>{t('table.location')}</th>
-              <th style={{ ...styles.th, ...styles.actions }}>{t('table.actions')}</th>
+              <th className={`${table.headerCell} ${table.nameColumn}`}>{t('table.name')}</th>
+              <th className={`${table.headerCell} ${table.descriptionColumn}`}>{t('table.description')}</th>
+              <th className={`${table.headerCell} ${table.scopeColumn}`}>{t('table.scope')}</th>
+              <th className={`${table.headerCell} ${table.locationColumn}`}>{t('table.location')}</th>
+              <th className={`${table.headerCell} ${table.actionsHeader}`}>{t('table.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(skill => (
               <tr key={skill.name}>
-                <td style={styles.td}><span style={styles.name} title={skill.name}><code>{skill.name}</code></span></td>
-                <td style={styles.td}><ExpandableText t={t}>{skill.description}</ExpandableText></td>
-                <td style={styles.td}><span style={styles.cellText}>{skill.source}</span></td>
-                <td style={styles.td}><LocationValue path={skill.path} t={t} /></td>
-                <td style={{ ...styles.td, ...styles.actions }}>
-                  <SkillActions
-                    t={t}
-                    disabled={busy}
-                    onView={() => { void openDetail(skill) }}
-                    onEdit={() => { void openEdit(skill) }}
-                    onDelete={() => setDeleteTarget(skill)}
-                  />
-                </td>
+                <td className={table.cell}><span className={styles.skillName} title={skill.name}><code>{skill.name}</code></span></td>
+                <td className={table.cell}><ExpandableText t={t}>{skill.description}</ExpandableText></td>
+                <td className={table.cell}>{skill.source}</td>
+                <td className={table.cell}><LocationValue path={skill.path} t={t} /></td>
+                <td className={`${table.cell} ${table.actionsCell}`}><SkillActions t={t} disabled={busy} onView={() => { void openDetail(skill) }} onEdit={() => { void openEdit(skill) }} onDelete={() => setDeleteTarget(skill)} /></td>
               </tr>
             ))}
-            {filtered.length === 0 && !loading ? (
-              <tr><td colSpan={5} style={styles.td}>{t('table.empty')}</td></tr>
-            ) : null}
+            {filtered.length === 0 && !loading ? <tr><td colSpan={5} className={table.empty}>{t('table.empty')}</td></tr> : null}
           </tbody>
         </table>
       </div>
-
-      {deleteTarget !== undefined ? (
-        <div style={styles.modalBackdrop}>
-          <div style={styles.modal} role="dialog" aria-modal="true" aria-labelledby="skills-manager-delete-title">
-            <h3 id="skills-manager-delete-title">{t('delete.title', { name: deleteTarget.name })}</h3>
-            <p>{t('delete.warning')}</p>
-            {error !== undefined ? <div style={styles.error}>{error}</div> : null}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <Button variant="ghost" size="sm" style={styles.button} disabled={busy} onClick={() => setDeleteTarget(undefined)}>{t('delete.cancel')}</Button>
-              <Button variant="primary" size="sm" style={styles.dangerButton} disabled={busy} onClick={() => { void confirmDelete() }}>{t('delete.confirm')}</Button>
-            </div>
+      <Modal
+        open={deleteTarget !== undefined}
+        onClose={() => { if (!busy) setDeleteTarget(undefined) }}
+        title={deleteTarget === undefined ? t('delete.title', { name: '' }) : t('delete.title', { name: deleteTarget.name })}
+        description={t('delete.warning')}
+        className={styles.modal}
+        footer={(
+          <div className={styles.modalActions}>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDeleteTarget(undefined)}>{t('delete.cancel')}</Button>
+            <Button variant="outline" size="sm" className={styles.dangerButton} disabled={busy} onClick={() => { void confirmDelete() }}>{t('delete.confirm')}</Button>
           </div>
-        </div>
-      ) : null}
+        )}
+      >
+        {error !== undefined ? <div className={styles.error} role="alert">{error}</div> : null}
+      </Modal>
     </div>
   )
 }
 
 function TitleRow({ title, children }: { title: string; children: ReactElement | ReactElement[] }): ReactElement {
-  return (
-    <div style={styles.titleRow}>
-      <h2 style={styles.title}>{title}</h2>
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'nowrap', minWidth: 0 }}>{children}</div>
-    </div>
-  )
+  return <div className={styles.titleRow}><h2 className={styles.pageTitle}>{title}</h2><div className={styles.titleActions}>{children}</div></div>
 }
 
 function LocationValue({ path, t }: { path?: string; t: TranslateNS<typeof SKILLS_MANAGER_NS> }): ReactElement {
   if (path === undefined || path.length === 0) return <span>{t('table.locationUnavailable')}</span>
-  return (
-    <Tooltip label={path} side="top" maxWidth={480}>
-      <span tabIndex={0} title={path} style={styles.location}><code style={{ fontSize: '12px' }}>{path}</code></span>
-    </Tooltip>
-  )
+  return <Tooltip label={path} side="top" maxWidth={480}><span tabIndex={0} title={path} className={styles.location}><code>{path}</code></span></Tooltip>
 }
 
-/**
- * Import summary card.
- *
- * The five headline numbers deliberately mix units: `Scanned` and
- * `Deduplicated` count candidate copies, `In DSH` counts unique skills. They
- * are not designed to sum, and the details view states that explicitly.
- */
-function ImportSummary({ report, t }: { report: ImportReport; t: TranslateNS<typeof SKILLS_MANAGER_NS> }): ReactElement {
-  return (
-    <div>
-      <div style={styles.summary}>
-        <SummaryItem label={t('import.summary.scanned')} value={report.scannedCandidates} />
-        <SummaryItem label={t('import.summary.inDsh')} value={report.inDsh} />
-        <SummaryItem label={t('import.summary.deduplicated')} value={report.duplicateCopies} />
-        <SummaryItem label={t('import.summary.conflicts')} value={report.conflicts} />
-        <SummaryItem label={t('import.summary.invalid')} value={report.invalid} />
-      </div>
-      <div style={styles.lastScan}>{t('import.lastScan', { time: formatTimestamp(report.finishedAt) })}</div>
-    </div>
-  )
-}
-
-function SummaryItem({ label, value }: { label: string; value: number }): ReactElement {
-  return (
-    <div style={styles.summaryItem}>
-      <span style={styles.summaryNumber}>{value}</span>
-      <span style={styles.summaryLabel}>{label}</span>
-    </div>
-  )
-}
-
-function formatTimestamp(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
-}
-
-function MetricRow({ label, value, strong }: { label: string; value: number; strong?: boolean }): ReactElement {
-  return (
-    <div style={styles.metricRow}>
-      <span style={strong === true ? styles.metricLabelStrong : styles.metricLabel}>{label}</span>
-      <span style={strong === true ? styles.metricValueStrong : styles.metricValue}>{value}</span>
-    </div>
-  )
-}
-
-function ImportReportView({ report, t }: { report: ImportReport; t: TranslateNS<typeof SKILLS_MANAGER_NS> }): ReactElement {
-  const [filter, setFilter] = useState<'all' | ImportReport['items'][number]['result']>('all')
-  const items = report.items.filter(item => filter === 'all' || item.result === filter)
-  const filters = ['all', 'new', 'duplicate', 'conflict', 'invalid', 'skipped'] as const
-  // Only multi-copy groups are worth aggregating; single-copy skills add noise.
-  const groups = report.duplicateGroups
-    .filter(group => group.candidateCount > 1)
-    .sort((a, b) => b.candidateCount - a.candidateCount)
-  return (
-    <div style={styles.panel}>
-      <ImportSummary report={report} t={t} />
-
-      <h3 style={styles.detailsTitle}>{t('import.details.title')}</h3>
-      <div style={styles.metrics}>
-        <MetricRow label={t('import.details.scanned')} value={report.scannedCandidates} />
-        <MetricRow label={t('import.details.uniqueValid')} value={report.uniqueValidSkills} />
-        <MetricRow label={t('import.details.inDsh')} value={report.inDsh} />
-        <MetricRow label={t('import.details.importedThisScan')} value={report.importedThisScan} />
-        <MetricRow label={t('import.details.deduplicated')} value={report.duplicateCopies} />
-        <MetricRow label={t('import.details.conflicts')} value={report.conflicts} />
-        <MetricRow label={t('import.details.invalid')} value={report.invalid} />
-        {report.failed > 0 ? <MetricRow label={t('import.details.failed')} value={report.failed} /> : null}
-      </div>
-      <p style={styles.note}>{t('import.unitNote')}</p>
-
-      {report.duplicateCopies > 0 ? (
-        <>
-          <h3 style={styles.detailsTitle}>{t('import.breakdown.title')}</h3>
-          <div style={styles.metrics}>
-            <MetricRow label={t('import.breakdown.samePath')} value={report.duplicateBreakdown.samePath} />
-            <MetricRow label={t('import.breakdown.sameContent')} value={report.duplicateBreakdown.sameContent} />
-            <MetricRow label={t('import.breakdown.alreadyInDsh')} value={report.duplicateBreakdown.alreadyInDsh} />
-            <MetricRow label={t('import.breakdown.total')} value={report.duplicateCopies} strong />
-          </div>
-        </>
-      ) : null}
-
-      {groups.length > 0 ? (
-        <>
-          <h3 style={styles.detailsTitle}>{t('import.groups.title')}</h3>
-          <ul style={styles.groupList}>
-            {groups.map(group => (
-              <li key={group.key} style={styles.groupItem}>
-                <div><code>{group.name}</code></div>
-                <div style={styles.groupMeta}>
-                  {t('import.groups.status')}: {group.inDsh ? t('import.groups.statusInDsh') : t('import.groups.statusNotInDsh')}
-                </div>
-                <div style={styles.groupMeta}>
-                  {t('import.groups.sources')}: {[...new Set(group.sources.map(source => source.source))].join(', ')}
-                </div>
-                <div style={styles.groupMeta}>
-                  {t('import.groups.candidates')}: {group.candidateCount} · {t('import.groups.uniqueSkill')}: 1
-                </div>
-                <div style={styles.groupMeta}>
-                  {t('import.groups.result')}: {group.importedThisScan
-                    ? t('import.groups.resultImported')
-                    : t('import.groups.resultMerged')}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-
-      <div style={{ margin: '8px 0', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {filters.map(name => (
-          <Button
-            key={name}
-            variant={filter === name ? 'outline' : 'ghost'}
-            size="sm"
-            style={styles.button}
-            onClick={() => setFilter(name === 'all' ? 'all' : name)}
-          >
-            {name === 'all' ? t('import.filter.all') : t(`import.filter.${name}` as SkillsManagerKey)}
-          </Button>
-        ))}
-      </div>
-      {items.length === 0 ? <p>{t('import.noItems')}</p> : (
-        <ul style={styles.list}>
-          {items.map((item, index) => (
-            <li key={`${item.source}-${item.skill}-${index}`} style={{ marginBottom: '4px' }}>
-              <code>{item.skill}</code> ({item.source}) — <strong>{t(`import.result.${item.result}` as SkillsManagerKey)}</strong> — {item.reason}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function formatError(t: TranslateNS<typeof SKILLS_MANAGER_NS>, key: 'errors.load' | 'errors.get' | 'errors.save' | 'errors.delete' | 'errors.scan' | 'errors.resolve', error: unknown): string {
+type ErrorKey = 'errors.load' | 'errors.get' | 'errors.save' | 'errors.delete' | 'errors.scan' | 'errors.resolve' | 'errors.openSkillsDirectory'
+function formatError(t: TranslateNS<typeof SKILLS_MANAGER_NS>, key: ErrorKey, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error)
   return `${t(key)}: ${detail}`
 }
-

@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode, ReactElement } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { SKILLS_MANAGER_NS } from './locale.ts'
 import { hasCollapsedOverflow } from './overflow.ts'
+import styles from './ExpandableText.module.css'
 
 export interface ExpandableTextProps {
   children: ReactNode
@@ -12,11 +13,7 @@ export interface ExpandableTextProps {
   style?: CSSProperties
 }
 
-/**
- * Text that clamps visually and only renders a toggle when the collapsed box
- * really overflows. Each instance owns its expanded state, so expanding one
- * table row does not affect any other row.
- */
+/** Text that clamps to two lines and expands only when it really overflows. */
 export function ExpandableText({ children, t, collapsedLines = 2, className, style }: ExpandableTextProps): ReactElement {
   const textRef = useRef<HTMLDivElement>(null)
   const [expanded, setExpanded] = useState(false)
@@ -32,9 +29,7 @@ export function ExpandableText({ children, t, collapsedLines = 2, className, sty
     measureOverflow()
     const node = textRef.current
     if (node === null) return
-    const resizeObserver = typeof ResizeObserver === 'undefined'
-      ? undefined
-      : new ResizeObserver(measureOverflow)
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measureOverflow)
     resizeObserver?.observe(node)
     window.addEventListener('resize', measureOverflow)
     return () => {
@@ -45,32 +40,13 @@ export function ExpandableText({ children, t, collapsedLines = 2, className, sty
 
   const collapsedStyle: CSSProperties = expanded
     ? { overflowWrap: 'anywhere' }
-    : {
-        display: '-webkit-box',
-        WebkitBoxOrient: 'vertical',
-        WebkitLineClamp: collapsedLines,
-        overflow: 'hidden',
-        overflowWrap: 'anywhere',
-      }
+    : { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: collapsedLines, overflow: 'hidden', overflowWrap: 'anywhere' }
 
   return (
     <div className={className} style={style}>
       <div ref={textRef} style={collapsedStyle}>{children}</div>
       {overflow ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded(value => !value)}
-          style={{
-            border: 0,
-            padding: 0,
-            marginTop: '4px',
-            background: 'transparent',
-            color: 'var(--dsw-alias-text-link, #2563eb)',
-            cursor: 'pointer',
-            fontSize: '12px',
-          }}
-        >
+        <button type="button" className={styles.toggle} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
           {expanded ? t('text.collapse') : t('text.expand')}
         </button>
       ) : null}

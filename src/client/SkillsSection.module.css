@@ -1,0 +1,393 @@
+.page {
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+/*
+ * Skills list only. The Settings content column is a fixed-height flex column
+ * whose `.options` child is `flex: 1; min-height: 0; overflow-y: auto`, so
+ * `height: 100%` here resolves against that already-bounded box — measured
+ * 722px inside a 746px options area at an 800px panel. That makes the page a
+ * flex column over the height Settings hands down, with no viewport math and
+ * no assumption about the panel's own size.
+ */
+.listPage {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.titleRow {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 16px;
+}
+
+.pageTitle {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  text-overflow: ellipsis;
+}
+
+.titleActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.inputField {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.textarea:focus {
+  border-color: var(--dsw-alias-brand-primary);
+  outline: none;
+}
+
+.textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.textarea {
+  min-height: 96px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.codeTextarea {
+  min-height: 280px;
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+  white-space: pre-wrap;
+}
+
+.editorForm {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fieldLabel {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.error,
+.info {
+  flex: none;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.error {
+  border-color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, var(--dsw-alias-bg-layer-1));
+}
+
+.info {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.skillName,
+.location {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location {
+  color: var(--dsw-alias-label-secondary);
+  cursor: help;
+}
+
+.location code,
+.skillName code,
+.recordSkill,
+.groupName {
+  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Consolas, monospace);
+}
+
+.location code {
+  font-size: 12px;
+}
+
+.empty {
+  margin: 16px 0 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.codeBlock {
+  max-height: 400px;
+  margin: 16px 0 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-secondary);
+  font: var(--ds-font-markdown-code-block-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.importSection {
+  min-width: 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.importSection:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sectionTitle {
+  margin: 0 0 12px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.summaryItem {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.summaryNumber {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryLabel,
+.caption,
+.note,
+.groupMeta,
+.recordSource {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.summaryLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caption {
+  margin: 8px 0 0;
+  color: var(--dsw-alias-label-caption);
+}
+
+.metricList {
+  display: grid;
+  max-width: 520px;
+  gap: 2px;
+}
+
+.metricRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 5px 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.metricRow strong {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.metricRowStrong {
+  margin-top: 2px;
+  padding-top: 7px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+}
+
+.note {
+  max-width: 640px;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.groupList {
+  display: grid;
+  gap: 8px;
+}
+
+.groupRow {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+}
+
+.groupName {
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}
+
+.filterRow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.recordList {
+  display: grid;
+  max-height: min(560px, 60vh);
+  overflow-y: auto;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+
+.recordRow {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+.recordHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.recordSkill {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recordReason {
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.modal {
+  width: min(520px, calc(100vw - 48px));
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dangerButton {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+@media (max-width: 640px) {
+  .titleRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .titleActions {
+    justify-content: flex-start;
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .recordSkill {
+    max-width: 100%;
+  }
+}

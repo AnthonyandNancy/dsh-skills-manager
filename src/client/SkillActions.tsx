@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { Button, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { SKILLS_MANAGER_NS } from './locale.ts'
+import styles from './SkillActions.module.css'
 
 export interface SkillActionsProps {
   t: TranslateNS<typeof SKILLS_MANAGER_NS>
@@ -43,7 +44,7 @@ export function SkillActions({ t, onView, onEdit, onDelete, disabled = false }: 
           aria-expanded={open}
           disabled={disabled}
           onClick={() => setOpen(value => !value)}
-          style={{ minWidth: '28px', paddingInline: '6px', fontSize: '18px', lineHeight: 1 }}
+          className={styles.trigger}
         >
           ⋯
         </Button>

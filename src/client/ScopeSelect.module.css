@@ -1,0 +1,60 @@
+/*
+ * Scope trigger: the editor's sibling controls are 32px `Input` atoms, so the
+ * trigger repeats the Input chrome (height, radius, padding, border, focus
+ * border) rather than the composer's rounded pill — a form row, not a chip.
+ */
+
+.root {
+  /* The Menu wrapper is inline-flex; the trigger must span the field. */
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  outline: none;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: left;
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger:focus-visible,
+.trigger[aria-expanded='true'] {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+}

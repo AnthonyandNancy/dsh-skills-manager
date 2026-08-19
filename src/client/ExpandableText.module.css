@@ -1,0 +1,19 @@
+.clamped {
+  overflow-wrap: anywhere;
+}
+
+.toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.toggle:hover {
+  color: var(--dsw-alias-brand-primary);
+}

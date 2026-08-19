@@ -9,7 +9,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { MetadataStore } from './storage.ts'
 import { listManagedSkills, getManagedSkill, createManagedSkill, updateManagedSkill, deleteManagedSkill } from './skills-service.ts'
-import { runExternalImport, reportFromMetadata, auditDshSkillDuplicates } from './import/importer.ts'
+import { ensureDshSkillsRoot, runExternalImport, reportFromMetadata, auditDshSkillDuplicates } from './import/importer.ts'
 import { listConflicts, resolveConflict } from './import/resolver.ts'
 import type { ExternalSourceId, ManagedSkillRow } from './types.ts'
 
@@ -118,6 +118,13 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
 
   try {
     switch (method) {
+      case 'skills.directory': {
+        // This endpoint deliberately accepts no path. The Host resolves the
+        // authoritative DSH home and creates only its native skills root.
+        const directory = await ensureDshSkillsRoot(services.dshHome)
+        ok(res, { directory })
+        return
+      }
       case 'skills.list': {
         const cwd = resolveCwd(payload)
         let sessionCount = 0

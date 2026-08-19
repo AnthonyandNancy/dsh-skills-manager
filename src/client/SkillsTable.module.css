@@ -1,0 +1,114 @@
+/*
+ * Skills list table: an independently scrolling viewport with a sticky header
+ * row and a sticky trailing actions column.
+ *
+ * The viewport is the sole scrollport for the rows — it owns both axes, so the
+ * horizontal scrollbar sits at the bottom of the visible box instead of below
+ * the last row. Sticky cells resolve against this box (no ancestor between it
+ * and the cells establishes another scrollport or a containing block).
+ */
+
+.viewport {
+  /* Consumes the height the list root leaves after title + toolbar. */
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  /* Reserve the vertical bar so growing rows never shift the columns. */
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * `border-collapse: separate` is required, not stylistic: the collapsed border
+ * model hands borders to the table, which drops them under sticky cells and
+ * leaves the header hairline missing once the header scrolls. Cells draw their
+ * own bottom border below instead.
+ */
+.table {
+  width: 100%;
+  /* Real columns rather than ever-narrowing ones: without a floor the engine
+     keeps squeezing text and horizontal overflow never happens. Sized so a wide
+     Settings panel shows no horizontal bar while a narrow one does. The page's
+     own 720px cap is the widest the table can ever be, so this floor sits just
+     below it (720 minus the reserved scrollbar gutter). */
+  min-width: 700px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.headerCell,
+.cell {
+  /* Declared column widths are total widths: with the default content box the
+     16px horizontal padding is added on top of every one of them, and the
+     leftover the flexible description column should get disappears into the
+     other four. */
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 9px 8px;
+  overflow: hidden;
+  text-align: left;
+  vertical-align: top;
+}
+
+.headerCell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  /* Sticky cells must be opaque: the Settings panel surface, since `.options`
+     paints no background of its own. */
+  background: var(--dsw-alias-bg-layer-2);
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.cell {
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+/* Actions column: pinned right so `⋯` survives any horizontal scroll offset.
+   The header cell is sticky on both axes, hence the higher layer than the
+   ordinary header cells it must cover. */
+.actionsHeader,
+.actionsCell {
+  position: sticky;
+  right: 0;
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  padding-right: 8px;
+  /* Not `hidden`: this cell hosts an interactive trigger, and clipping buys
+     nothing here (no ellipsis text). */
+  overflow: visible;
+  background: var(--dsw-alias-bg-layer-2);
+  border-left: 1px solid var(--dsw-alias-border-l2);
+  text-align: right;
+}
+
+.actionsHeader {
+  z-index: 4;
+}
+
+.actionsCell {
+  z-index: 3;
+}
+
+.nameColumn { width: 20%; }
+/* `auto` under table-layout:fixed takes whatever the sized columns leave. */
+.descriptionColumn { width: auto; }
+.scopeColumn { width: 100px; }
+.locationColumn { width: 220px; }
+
+.empty {
+  padding: 16px 8px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: left;
+  vertical-align: top;
+}

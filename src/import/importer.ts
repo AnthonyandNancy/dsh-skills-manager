@@ -11,8 +11,8 @@
  */
 
 import { cp, copyFile, mkdir, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type {
   DshDuplicateAudit,
   DshDuplicateContentGroup,
@@ -52,7 +52,13 @@ export interface ImportServices {
 }
 
 export function resolveDshSkillsRoot(dshHome?: string): string {
-  return join(dshHome ?? process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'skills')
+  return join(resolveDshHome(dshHome), 'skills')
+}
+
+export async function ensureDshSkillsRoot(dshHome?: string): Promise<string> {
+  const directory = resolveDshSkillsRoot(dshHome)
+  await mkdir(directory, { recursive: true })
+  return directory
 }
 
 /** Compute DSH existing skill snapshots for dedup. */

@@ -5,6 +5,7 @@
  * UI over DSH's native Skills API; no skill runtime lives here.
  */
 
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only imports merge the current DSH locale and settings-slot contracts.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -31,6 +32,7 @@ export function apply(ctx: ClientContext): void {
       locale: SKILLS_MANAGER_NS,
       inject: (): SkillsSectionInjected => ({
         api: skillsManagerApi,
+        connection: ctx.get('connection') as ConnectionHandle,
         remote: ctx.get('remote') as SkillsSectionInjected['remote'],
       }),
     }, SkillsSection),

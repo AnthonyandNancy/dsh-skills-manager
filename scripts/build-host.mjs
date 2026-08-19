@@ -50,6 +50,7 @@ if (checkout === undefined) {
     '@deepseek-ai/dsh-llm': 'packages/llm/llm',
     '@deepseek-ai/dsh-system-prompt': 'packages/core/system-prompt',
     '@deepseek-ai/dsh-skill': 'packages/skill/skill',
+    '@deepseek-ai/dsh-home-paths': 'packages/util/home-paths',
     '@deepseek-ai/dsh-settings': 'packages/settings/settings',
     '@deepseek-ai/dsh-host-webserver': 'packages/host/webserver',
     '@deepseek-ai/dsh-scope': 'packages/core/scope',

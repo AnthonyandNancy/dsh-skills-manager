@@ -71,10 +71,12 @@ link_pkg @deepseek-ai/dsh-tools packages/core/tools
 link_pkg @deepseek-ai/dsh-llm packages/llm/llm
 link_pkg @deepseek-ai/dsh-system-prompt packages/core/system-prompt
 link_pkg @deepseek-ai/dsh-skill packages/skill/skill
+link_pkg @deepseek-ai/dsh-home-paths packages/util/home-paths
 link_pkg @deepseek-ai/dsh-settings packages/settings/settings
 link_pkg @deepseek-ai/dsh-host-webserver packages/host/webserver
 link_pkg @deepseek-ai/dsh-scope packages/core/scope
 link_pkg @deepseek-ai/dsh-invariants packages/runtime-diagnostics/invariants
+link_pkg @deepseek-ai/dsh-client-connection packages/client/connection
 link_pkg @deepseek-ai/dsh-client-locale packages/client/locale
 link_pkg @deepseek-ai/dsh-client-runtime packages/client/runtime
 link_pkg @deepseek-ai/dsh-client-ui-primitives packages/client/ui-primitives

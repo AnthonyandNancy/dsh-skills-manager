@@ -143,6 +143,8 @@ function isError(value: unknown): value is { ok: false; error: { code: string; m
 }
 
 export interface SkillsManagerApi {
+  /** Ask the Host for the fixed DSH-native skills directory; no path input. */
+  skillsDirectory(): Promise<{ directory: string }>
   listSkills(cwd?: string): Promise<{ skills: ManagedSkillRow[] }>
   getSkill(name: string, cwd?: string): Promise<{ skill: ManagedSkillDetail }>
   createSkill(input: { name: string; description: string; whenToUse?: string; body: string; scope?: 'global' | 'project'; cwd?: string }): Promise<{ skill: ManagedSkillDetail }>
@@ -157,6 +159,7 @@ export interface SkillsManagerApi {
 }
 
 export const skillsManagerApi: SkillsManagerApi = {
+  skillsDirectory() { return call('skills.directory', {}) },
   listSkills(cwd) { return call('skills.list', cwd === undefined ? {} : { cwd }) },
   getSkill(name, cwd) { return call('skills.get', { name, ...cwd === undefined ? {} : { cwd } }) },
   createSkill(input) { return call('skills.create', input) },

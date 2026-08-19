@@ -10,6 +10,8 @@ export const zh = {
   'toolbar.conflicts': '冲突',
   'toolbar.scanExternal': '扫描外部技能',
   'toolbar.newSkill': '新建技能',
+  'toolbar.openSkillsFolder': '打开技能目录',
+  'toolbar.openSkillsFolderUnavailable': '当前环境不支持打开本地目录',
   'table.name': '名称',
   'table.description': '描述',
   'table.scope': '范围',
@@ -48,6 +50,8 @@ export const zh = {
   'editor.cancel': '取消',
   'editor.save': '保存',
   'import.title': '外部技能导入',
+  'import.overview.title': '概览',
+  'import.records.title': '记录',
   'import.back': '返回',
   'import.scanAgain': '重新扫描',
   'import.viewDetails': '查看详情',
@@ -108,6 +112,7 @@ export const zh = {
   'errors.delete': '删除技能失败',
   'errors.scan': '扫描外部技能失败',
   'errors.resolve': '处理冲突失败',
+  'errors.openSkillsDirectory': '打开技能目录失败',
 } satisfies Record<string, string>
 
 /** Skills Manager locale keys. */
@@ -120,6 +125,8 @@ export const en = {
   'toolbar.conflicts': 'Conflicts',
   'toolbar.scanExternal': 'Scan External Skills',
   'toolbar.newSkill': 'New Skill',
+  'toolbar.openSkillsFolder': 'Open skills folder',
+  'toolbar.openSkillsFolderUnavailable': 'Opening local folders is unavailable in the current environment.',
   'table.name': 'Name',
   'table.description': 'Description',
   'table.scope': 'Scope',
@@ -158,6 +165,8 @@ export const en = {
   'editor.cancel': 'Cancel',
   'editor.save': 'Save',
   'import.title': 'External Skills Import',
+  'import.overview.title': 'Overview',
+  'import.records.title': 'Records',
   'import.back': 'Back',
   'import.scanAgain': 'Scan Again',
   'import.viewDetails': 'View Details',
@@ -218,6 +227,7 @@ export const en = {
   'errors.delete': 'Failed to delete skill',
   'errors.scan': 'Failed to scan external skills',
   'errors.resolve': 'Failed to resolve conflict',
+  'errors.openSkillsDirectory': 'Failed to open skills folder',
 } satisfies Record<SkillsManagerKey, string>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
