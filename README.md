@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh.md)
 
-`dsh-skills-manager` is a visual manager for **DSH Native Skills**. It keeps DSH's native Skill Registry, Loader, Runtime, discovery, progressive loading, and context injection as the source of truth. The plugin adds a Settings surface and a first-run External Skills import pipeline with safe deduplication; it does not implement a second Skills runtime.
+`dsh-skills-manager` is a visual manager for **DSH Native Skills**. It keeps DSH's native Skill Registry, Loader, Runtime, discovery, progressive loading, and context injection as the source of truth. The plugin adds a Settings surface and a manual External Skills import pipeline with safe deduplication; it does not implement a second Skills runtime.
 
 ## Features
 
@@ -48,7 +48,7 @@ Descriptions are clamped to two visual lines. A More/展开 control appears only
 
 ## External Skills Import
 
-The first Host initialization can scan the supported external skill roots. The UI also provides Scan External Skills and a conflict-resolution page. Import is intentionally explicit about conflict handling and only writes DSH-managed skill directories.
+External import is manual only. Use the Scan External Skills action in the Settings UI to scan the supported external skill roots, then use the conflict-resolution page when needed. The Host never scans or imports those roots during plugin load. Import is intentionally explicit about conflict handling and only writes DSH-managed skill directories.
 
 ## Deduplication
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-`dsh-skills-manager` 是 **DSH Native Skills 的可视化管理插件**。它沿用 DSH 原生 Skill Registry、Loader、Runtime、发现、渐进加载与上下文注入机制，作为管理层增加 Settings 页面和首次 External Skills 去重导入流程，不实现第二套 Skills Runtime。
+`dsh-skills-manager` 是 **DSH Native Skills 的可视化管理插件**。它沿用 DSH 原生 Skill Registry、Loader、Runtime、发现、渐进加载与上下文注入机制，作为管理层增加 Settings 页面和手动 External Skills 去重导入流程，不实现第二套 Skills Runtime。
 
 ## 功能
 
@@ -48,7 +48,7 @@ dsh --profile skills-test --dump-config
 
 ## 外部技能导入
 
-Host 第一次初始化时可以扫描支持的外部技能目录，页面也提供“扫描外部技能”和冲突处理页面。导入过程会明确展示冲突，不会静默覆盖 DSH 管理的技能，只写入 DSH 管理的技能目录。
+外部技能导入只由用户手动触发。在 Settings 页面点击“扫描外部技能”即可扫描支持的外部技能目录，需要时再进入冲突处理页面。插件加载时 Host 不会扫描或导入这些目录。导入过程会明确展示冲突，不会静默覆盖 DSH 管理的技能，只写入 DSH 管理的技能目录。
 
 ## 去重规则
 
