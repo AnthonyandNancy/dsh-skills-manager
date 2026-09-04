@@ -1,7 +1,7 @@
 /** Settings → Skills management surface over DSH's native Skills API. */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ReactElement } from 'react'
+import { Component, useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { Button, Input, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -12,6 +12,7 @@ import { ExpandableText } from './ExpandableText.tsx'
 import { SkillActions } from './SkillActions.tsx'
 import { canOpenSkillsDirectory, openSkillsDirectory as openFixedSkillsDirectory } from './open-skills-folder.ts'
 import { SKILLS_MANAGER_NS } from './locale.ts'
+import { readHostDescription, subscribeHostDescription, type HostDescriptionSourceLike } from './compat.ts'
 import styles from './SkillsSection.module.css'
 import table from './SkillsTable.module.css'
 
@@ -29,6 +30,10 @@ export interface SkillsSectionProps extends SkillsSectionInjected {
 type Mode = 'list' | 'detail' | 'create' | 'edit' | 'import' | 'conflicts'
 
 export function SkillsSection(props: SkillsSectionProps): ReactElement {
+  return <SkillsErrorBoundary t={props.t}><SkillsSectionContent {...props} /></SkillsErrorBoundary>
+}
+
+function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
   const { api, connection, remote, t } = props
   const [skills, setSkills] = useState<ManagedSkillRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,16 +46,13 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
   const [conflicts, setConflicts] = useState<ConflictView[]>([])
   const [deleteTarget, setDeleteTarget] = useState<ManagedSkillRow | undefined>()
   const [busy, setBusy] = useState(false)
-  const [hostDescription, setHostDescription] = useState(() => connection?.hostDescription.getSnapshot())
+  const hostDescriptionSource = connection?.hostDescription as HostDescriptionSourceLike | undefined
+  const [hostDescription, setHostDescription] = useState(() => readHostDescription(hostDescriptionSource))
 
   useEffect(() => {
-    if (connection === undefined) {
-      setHostDescription(undefined)
-      return
-    }
-    setHostDescription(connection.hostDescription.getSnapshot())
-    return connection.hostDescription.subscribe(() => setHostDescription(connection.hostDescription.getSnapshot()))
-  }, [connection])
+    setHostDescription(readHostDescription(hostDescriptionSource))
+    return subscribeHostDescription(hostDescriptionSource, () => setHostDescription(readHostDescription(hostDescriptionSource)))
+  }, [hostDescriptionSource])
 
   const loadSkills = useCallback(async () => {
     try {
@@ -322,6 +324,31 @@ function LocationValue({ path, t }: { path?: string; t: TranslateNS<typeof SKILL
 }
 
 type ErrorKey = 'errors.load' | 'errors.get' | 'errors.save' | 'errors.delete' | 'errors.scan' | 'errors.resolve' | 'errors.openSkillsDirectory'
+
+interface SkillsErrorBoundaryProps {
+  t: TranslateNS<typeof SKILLS_MANAGER_NS>
+  children: ReactNode
+}
+
+interface SkillsErrorBoundaryState {
+  error?: Error
+}
+
+class SkillsErrorBoundary extends Component<SkillsErrorBoundaryProps, SkillsErrorBoundaryState> {
+  state: SkillsErrorBoundaryState = {}
+
+  static getDerivedStateFromError(error: Error): SkillsErrorBoundaryState {
+    return { error }
+  }
+
+  render(): ReactElement {
+    if (this.state.error !== undefined) {
+      return <div className={styles.page} role="alert"><p className={styles.error}>{this.props.t('errors.render')}: {this.state.error.message}</p><Button variant="outline" size="sm" onClick={() => this.setState({ error: undefined })}>{this.props.t('detail.back')}</Button></div>
+    }
+    return <>{this.props.children}</>
+  }
+}
+
 function formatError(t: TranslateNS<typeof SKILLS_MANAGER_NS>, key: ErrorKey, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error)
   return `${t(key)}: ${detail}`

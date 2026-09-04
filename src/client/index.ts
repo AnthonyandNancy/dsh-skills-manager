@@ -7,6 +7,7 @@
 
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { isClientContextCompatible } from './compat.ts'
 // Type-only imports merge the current DSH locale and settings-slot contracts.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -21,6 +22,7 @@ export { SKILLS_MANAGER_NS, en, zh } from './locale.ts'
 export const inject = ['slots', 'locale', 'connection', 'remote']
 
 export function apply(ctx: ClientContext): void {
+  if (!isClientContextCompatible(ctx)) return
   ctx.effect(() => ctx.locale.register(SKILLS_MANAGER_NS, { zh, en }), 'dsh-skills-manager: dictionaries')
   const t = ctx.locale.bind(SKILLS_MANAGER_NS)
   ctx.slots.inject('settings.section', () =>

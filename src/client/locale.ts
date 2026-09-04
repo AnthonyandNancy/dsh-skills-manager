@@ -113,6 +113,8 @@ export const zh = {
   'errors.scan': '扫描外部技能失败',
   'errors.resolve': '处理冲突失败',
   'errors.openSkillsDirectory': '打开技能目录失败',
+  'errors.incompatibleHost': '当前 DSH 版本不支持 Skills 管理界面',
+  'errors.render': 'Skills 管理界面加载失败',
 } satisfies Record<string, string>
 
 /** Skills Manager locale keys. */
@@ -228,6 +230,8 @@ export const en = {
   'errors.scan': 'Failed to scan external skills',
   'errors.resolve': 'Failed to resolve conflict',
   'errors.openSkillsDirectory': 'Failed to open skills folder',
+  'errors.incompatibleHost': 'This DSH version does not support the Skills Manager UI',
+  'errors.render': 'The Skills Manager UI failed to load',
 } satisfies Record<SkillsManagerKey, string>
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {

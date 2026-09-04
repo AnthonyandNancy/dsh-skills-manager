@@ -3,7 +3,7 @@ import type { SkillsManagerApi } from './api.ts'
 
 export function canOpenSkillsDirectory(
   connection: Pick<ConnectionHandle, 'isLoopback'> | undefined,
-  description: { canOpenPath: boolean } | undefined,
+  description: { canOpenPath?: boolean } | undefined,
 ): boolean {
   return connection?.isLoopback === true && description?.canOpenPath === true
 }
