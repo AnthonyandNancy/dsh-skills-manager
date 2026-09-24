@@ -1,6 +1,6 @@
 /** Settings → Skills management surface over DSH's native Skills API. */
 
-import { Component, useCallback, useEffect, useMemo, useState } from 'react'
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { Button, Input, Modal, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
@@ -10,16 +10,16 @@ import { ExternalImportView } from './ExternalImportView.tsx'
 import { SkillEditor, EMPTY_DRAFT, type EditorDraft } from './SkillEditor.tsx'
 import { ExpandableText } from './ExpandableText.tsx'
 import { SkillActions } from './SkillActions.tsx'
-import { canOpenSkillsDirectory, openSkillsDirectory as openFixedSkillsDirectory } from './open-skills-folder.ts'
+import { canOpenSkillsDirectory, openSkillsDirectory as openFixedSkillsDirectory, type SessionPathRemote } from './open-skills-folder.ts'
 import { SKILLS_MANAGER_NS } from './locale.ts'
-import { readHostDescription, subscribeHostDescription, type HostDescriptionSourceLike } from './compat.ts'
+import { readHostDescription, subscribeHostDescription, hostDescriptionSourceOf, connectionStateSource, readConnectionState, subscribeConnectionState, transportUnavailable } from './compat.ts'
 import styles from './SkillsSection.module.css'
 import table from './SkillsTable.module.css'
 
 export interface SkillsSectionInjected {
   api: SkillsManagerApi
   connection?: ConnectionHandle
-  remote?: { $on?: (event: string, listener: () => void) => () => void }
+  remote?: { $on?: (event: string, listener: () => void) => () => void; session?: SessionPathRemote }
 }
 
 export interface SkillsSectionProps extends SkillsSectionInjected {
@@ -46,21 +46,43 @@ function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
   const [conflicts, setConflicts] = useState<ConflictView[]>([])
   const [deleteTarget, setDeleteTarget] = useState<ManagedSkillRow | undefined>()
   const [busy, setBusy] = useState(false)
-  const hostDescriptionSource = connection?.hostDescription as HostDescriptionSourceLike | undefined
+  const hostDescriptionSource = hostDescriptionSourceOf(connection)
   const [hostDescription, setHostDescription] = useState(() => readHostDescription(hostDescriptionSource))
+  const [canOpenFolder, setCanOpenFolder] = useState(false)
+  const stateSource = connectionStateSource(connection)
+  const [connectionState, setConnectionState] = useState(() => readConnectionState(stateSource))
 
   useEffect(() => {
     setHostDescription(readHostDescription(hostDescriptionSource))
     return subscribeHostDescription(hostDescriptionSource, () => setHostDescription(readHostDescription(hostDescriptionSource)))
   }, [hostDescriptionSource])
 
+  useEffect(() => {
+    let cancelled = false
+    // Current releases answer this over the session Remote, so the control stays
+    // hidden until the Host has actually answered instead of guessing.
+    void canOpenSkillsDirectory(connection, hostDescription, remote?.session).then((available) => {
+      if (!cancelled) setCanOpenFolder(available)
+    })
+    return () => { cancelled = true }
+  }, [connection, hostDescription, remote])
+
+  useEffect(() => {
+    setConnectionState(readConnectionState(stateSource))
+    return subscribeConnectionState(stateSource, () => setConnectionState(readConnectionState(stateSource)))
+  }, [stateSource])
+
   const loadSkills = useCallback(async () => {
     try {
       setSkills((await api.listSkills()).skills)
     } catch (err) {
+      // A reconnecting transport is not a skill failure: stay quiet and let the
+      // state effect refetch once it is connected, instead of pinning an error
+      // the next attempt would not reproduce.
+      if (transportUnavailable(connection)) return
       setError(formatError(t, 'errors.load', err))
     }
-  }, [api, t])
+  }, [api, connection, t])
 
   const loadConflicts = useCallback(async () => {
     try {
@@ -78,6 +100,17 @@ function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
   }, [loadConflicts, loadSkills])
 
   useEffect(() => { void refresh() }, [refresh])
+
+  // Reload when the transport comes back: DSH 0.1.5 renders Settings while the
+  // connection is connecting or disconnected, so the mount-time load above can
+  // legitimately fail before the Host API is reachable again.
+  const previousState = useRef(connectionState)
+  useEffect(() => {
+    const previous = previousState.current
+    previousState.current = connectionState
+    if (connectionState !== 'connected' || previous === 'connected') return
+    void refresh()
+  }, [connectionState, refresh])
 
   useEffect(() => {
     if (remote?.$on === undefined) return
@@ -186,19 +219,17 @@ function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
   }, [api, refresh, t])
 
   const openSkillsDirectory = useCallback(async () => {
-    if (connection === undefined || !connection.isLoopback || hostDescription?.canOpenPath !== true) return
+    if (!canOpenFolder) return
     setBusy(true)
     setError(undefined)
     try {
-      await openFixedSkillsDirectory(api, connection)
+      await openFixedSkillsDirectory(api, connection, remote?.session)
     } catch (err) {
       setError(formatError(t, 'errors.openSkillsDirectory', err))
     } finally {
       setBusy(false)
     }
-  }, [api, connection, hostDescription?.canOpenPath, t])
-
-  const canOpenFolder = canOpenSkillsDirectory(connection, hostDescription)
+  }, [api, canOpenFolder, connection, remote, t])
   const unavailableLabel = t('toolbar.openSkillsFolderUnavailable')
 
   if (mode === 'detail' && selected !== undefined) {
@@ -299,6 +330,7 @@ function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
         open={deleteTarget !== undefined}
         onClose={() => { if (!busy) setDeleteTarget(undefined) }}
         title={deleteTarget === undefined ? t('delete.title', { name: '' }) : t('delete.title', { name: deleteTarget.name })}
+        closeLabel={t('dialog.close')}
         description={t('delete.warning')}
         className={styles.modal}
         footer={(

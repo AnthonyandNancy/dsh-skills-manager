@@ -11,7 +11,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { ManagedSkillDetail, ManagedSkillRow } from './types.ts'
 import { createSkillAccess } from './skills-access.ts'
-import { resolveSkillsManagerView, withViewScope } from './skills-view.ts'
+import { withSkillsManagerView, withViewScope } from './skills-view.ts'
 import { resolveDshSkillsRoot } from './import/importer.ts'
 import { serializeSkillFile } from './import/parser.ts'
 
@@ -64,34 +64,35 @@ export function assertManagedSkillPath(path: string, roots: readonly string[]): 
 
 /** List DSH native skills with management metadata. */
 export async function listManagedSkills(ctx: ManagedSkillContext, cwd?: string): Promise<ManagedSkillRow[]> {
-  const view = await resolveSkillsManagerView(ctx.ctx)
-  const summaries = await view.registry.list(withViewScope(view, { cwd }))
-  ctx.ctx.logger?.info?.(
-    '[dsh-skills-manager] skills.list: cwd=%s scopeSource=%s registry=host count=%d',
-    cwd ?? '-',
-    view.scopeSource,
-    summaries.length,
-  )
-  const rows: ManagedSkillRow[] = []
-  for (const summary of summaries) {
-    let path: string | undefined
-    try {
-      path = (await view.registry.get(summary.name, withViewScope(view, { cwd })))?.path
-    } catch {
-      path = undefined
+  return await withSkillsManagerView(ctx.ctx, async (view) => {
+    const summaries = await view.registry.list(withViewScope(view, { cwd }))
+    ctx.ctx.logger?.info?.(
+      '[dsh-skills-manager] skills.list: cwd=%s scopeSource=%s registry=host count=%d',
+      cwd ?? '-',
+      view.scopeSource,
+      summaries.length,
+    )
+    const rows: ManagedSkillRow[] = []
+    for (const summary of summaries) {
+      let path: string | undefined
+      try {
+        path = (await view.registry.get(summary.name, withViewScope(view, { cwd })))?.path
+      } catch {
+        path = undefined
+      }
+      rows.push({
+        name: summary.name,
+        description: summary.description,
+        ...summary.whenToUse === undefined ? {} : { whenToUse: summary.whenToUse },
+        source: summary.source,
+        provider: summary.provider,
+        ...path === undefined ? {} : { path },
+        modelInvocable: summary.invocation.modelInvocable,
+        userInvocable: summary.invocation.userInvocable,
+      })
     }
-    rows.push({
-      name: summary.name,
-      description: summary.description,
-      ...summary.whenToUse === undefined ? {} : { whenToUse: summary.whenToUse },
-      source: summary.source,
-      provider: summary.provider,
-      ...path === undefined ? {} : { path },
-      modelInvocable: summary.invocation.modelInvocable,
-      userInvocable: summary.invocation.userInvocable,
-    })
-  }
-  return rows
+    return rows
+  })
 }
 
 /** Read one DSH native skill including its body. */

@@ -1,6 +1,13 @@
 /**
  * Typed fetch wrapper over the Skills Manager host API.
+ *
+ * The Host registers one exact Fetch route on DSH's shared `/api` channel; the
+ * method selector travels in the JSON body so the transport stays a single
+ * fenced, authenticated route instead of a plugin-owned URL space.
  */
+
+/** Absolute path of the Host route, mirrored from `src/routes.ts`. */
+export const API_PATH = '/api/skills-manager'
 
 export interface ManagedSkillRow {
   name: string
@@ -111,10 +118,10 @@ export class SkillsApiError extends Error {
 async function call<T>(method: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`/skills-manager/api/${method}`, {
+    response = await fetch(API_PATH, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ method, ...payload }),
       signal,
     })
   } catch (error) {

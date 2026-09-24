@@ -14,7 +14,10 @@
  *   imported a skill, and must never be used to decide whether DSH has it now.
  */
 
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type {
   ImportMetadataRecord,
   ImportedSkillProvenance,
@@ -50,6 +53,8 @@ export const skillsManagerMetadataSchema: ReturnType<typeof z.object> = z.object
 })
 
 export interface MetadataStore {
+  /** Settle the initial load; stores that already hold state resolve immediately. */
+  ready(): Promise<void>
   get(): SkillsManagerMetadata
   save(metadata: SkillsManagerMetadata): Promise<void>
 }
@@ -133,6 +138,9 @@ export function normalizeMetadata(value: unknown): SkillsManagerMetadata {
 export function createMemoryMetadataStore(initial?: unknown): MetadataStore {
   let state = initial === undefined ? EMPTY_METADATA : normalizeMetadata(initial)
   return {
+    async ready() {
+      // Nothing to load: the state is already in memory.
+    },
     get() {
       return state
     },
@@ -142,39 +150,122 @@ export function createMemoryMetadataStore(initial?: unknown): MetadataStore {
   }
 }
 
+/** Absolute path of the metadata file this plugin owns below the DSH home. */
+export function metadataFilePath(dshHome?: string): string {
+  return join(resolveDshHome(dshHome), 'skills-manager', 'metadata.json')
+}
+
 /**
- * Build a metadata store bound to the plugin context. If the Settings seam is
- * available, it registers a namespace and persists through DSH's official
- * settings provider; otherwise it falls back to memory.
+ * File-backed metadata store.
+ *
+ * The plugin's own file is the store for every release whose settings seam is
+ * not a plugin-data seam (see {@link createMetadataStore}). A read that beats
+ * the initial load sees empty metadata, so callers await
+ * {@link MetadataStore.ready} first; `save()` waits for that same load, so a
+ * scan can never overwrite history it has not read yet.
+ * @param path - absolute path of the metadata file.
+ * @returns the store; writers are serialized and land through a temp-file rename.
  */
-export function createMetadataStore(ctx: any): MetadataStore {
-  const fallback = createMemoryMetadataStore()
-  let scope: { get(): unknown; replace(value: unknown): Promise<void> | void } | undefined
+export function createFileMetadataStore(path: string): MetadataStore {
+  let state: SkillsManagerMetadata | undefined
+  let queue: Promise<void> = Promise.resolve()
+
+  const loaded = (async () => {
+    try {
+      state = normalizeMetadata(JSON.parse(await readFile(path, 'utf8')))
+    } catch {
+      // Missing (first run) or unreadable/corrupt: stay empty and let the next
+      // save rewrite the file rather than failing the management surface.
+      state = undefined
+    }
+  })()
+
+  const write = async (metadata: SkillsManagerMetadata): Promise<void> => {
+    await mkdir(dirname(path), { recursive: true })
+    const temp = `${path}.${process.pid}.tmp`
+    await writeFile(temp, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8')
+    await rename(temp, path)
+  }
+
+  return {
+    async ready() {
+      await loaded
+    },
+    get() {
+      return state ?? EMPTY_METADATA
+    },
+    async save(metadata) {
+      await loaded
+      state = metadata
+      queue = queue.then(() => write(metadata), () => write(metadata))
+      await queue
+    },
+  }
+}
+
+/** One DSH settings namespace as the ≤0.1.6 seam exposed it. */
+interface SettingsNamespaceLike {
+  get(): unknown
+  replace(value: unknown): Promise<void> | void
+}
+
+export interface MetadataStoreOptions {
+  /** DSH home override; defaults to `$DSH_HOME` or `~/.dsh`. */
+  readonly dshHome?: string
+}
+
+/**
+ * Build the metadata store bound to the plugin context.
+ *
+ * The settings seam is capability-probed, never assumed. DSH ≤0.1.6 exposes
+ * `ctx.settings.register(ns, schema, …)`, a plugin-owned namespace the host
+ * persists for us — the best home whenever it exists. 0.1.7 replaced that with
+ * `SettingsForms`, a projection of composed profile entries
+ * (`configure`/`describe`/`update`) with no namespace registration at all, so
+ * probing for `register` keeps the old path and falls back to the plugin's own
+ * file instead of throwing against a seam that no longer means what it did.
+ * @param ctx - plugin context used for the optional settings injection.
+ * @param options - DSH home the fallback file lives under.
+ * @returns the store the API reads and writes import metadata through.
+ */
+export function createMetadataStore(ctx: any, options: MetadataStoreOptions = {}): MetadataStore {
+  const file = createFileMetadataStore(metadataFilePath(options.dshHome))
+  let namespace: SettingsNamespaceLike | undefined
 
   ctx.inject(['settings'], (sctx: any) => {
-    const ns = SKILLS_MANAGER_NS as never
-    scope = sctx.settings.register(ns, skillsManagerMetadataSchema, {
+    if (typeof sctx.settings?.register !== 'function') return
+    namespace = sctx.settings.register(SKILLS_MANAGER_NS as never, skillsManagerMetadataSchema, {
       applies: 'live',
       base: EMPTY_METADATA,
-    }) as { get(): unknown; replace(value: unknown): Promise<void> | void }
+    }) as SettingsNamespaceLike
   })
 
   return {
+    async ready() {
+      await file.ready()
+    },
     get() {
-      if (scope !== undefined) {
+      if (namespace !== undefined) {
         try {
-          return normalizeMetadata(scope.get())
+          return normalizeMetadata(namespace.get())
         } catch {
-          return fallback.get()
+          // A host namespace that cannot answer is not a reason to lose the
+          // report: serve the file below instead.
         }
       }
-      return fallback.get()
+      return file.get()
     },
     async save(metadata) {
-      await fallback.save(metadata)
-      if (scope !== undefined) {
-        await scope.replace(metadata as never)
+      if (namespace !== undefined) {
+        try {
+          await namespace.replace(metadata as never)
+          return
+        } catch {
+          // Fall through to the file, so a namespace the host refuses still
+          // leaves the caller with a persisted record.
+        }
       }
+      await file.save(metadata)
     },
   }
 }

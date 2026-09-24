@@ -2,8 +2,8 @@
  * dsh-skills-manager — DSH native Skills visual manager + manual external importer.
  *
  * Host half responsibilities:
- * 1. Register the thin `/skills-manager/api` JSON API used by the Settings →
- *    Skills UI.
+ * 1. Register the thin `/api/skills-manager` JSON API used by the Settings →
+ *    Skills UI on DSH's shared `/api` Fetch channel.
  * 2. External imports are manual only: the Settings UI's Scan External Skills
  *    action invokes `import.scan`. Loading this plugin never scans or imports
  *    Claude/Codex/Cursor/Gemini skill roots.
@@ -31,7 +31,7 @@ export const Config = z.object({
 
 export function apply(ctx: any, config: Config = {}): void {
   const dshHome = config.dshHome === '' ? undefined : config.dshHome
-  const metadata = createMetadataStore(ctx)
+  const metadata = createMetadataStore(ctx, { dshHome })
 
   installRoutes({ ctx, metadata, dshHome })
 }

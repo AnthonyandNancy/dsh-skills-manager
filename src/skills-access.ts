@@ -8,31 +8,39 @@
  * Instead it resolves the default agent preset's standing scope, which makes
  * preset-owned skill providers visible even when no session or live agent
  * exists yet.
+ *
+ * The scope is resolved per read and released the moment that read settles:
+ * DSH ≥0.1.7 hands back a reference lease, and a lease left open pins the
+ * preset generation it keeps alive (see `skills-view.ts`). Readers that issue
+ * more than one registry call — a list plus one load per row — should use
+ * {@link SkillAccess.withView}, so the batch holds exactly one lease.
  */
 
-import { resolveSkillsManagerView, type SkillsManagerView } from './skills-view.ts'
+import { withSkillsManagerView, withViewScope, type SkillsManagerView, type SkillsViewContext } from './skills-view.ts'
 
 export interface SkillAccess {
-  /** The resolved view; useful for diagnostics and shared list/get scoping. */
-  readonly view: SkillsManagerView
+  /** Run one read batch inside a single, already-scoped view. */
+  withView<T>(read: (view: SkillsManagerView) => Promise<T>): Promise<T>
   list(options?: { cwd?: string; signal?: AbortSignal }): Promise<any[]>
   get(name: string, options?: { cwd?: string; signal?: AbortSignal }): Promise<any | undefined>
 }
 
-export async function createSkillAccess(ctx: {
-  get?: (name: string) => any
-  skills?: any
-  logger?: { info?: (...args: any[]) => void; warn?: (...args: any[]) => void; error?: (...args: any[]) => void }
-}): Promise<SkillAccess> {
-  const view = await resolveSkillsManagerView(ctx)
+export async function createSkillAccess(ctx: SkillsViewContext): Promise<SkillAccess> {
+  const registry = ctx.get?.('skills') ?? ctx.skills
+  if (registry === undefined) {
+    throw new Error('DSH skills service is not available')
+  }
+
+  const withView = <T>(read: (view: SkillsManagerView) => Promise<T>): Promise<T> =>
+    withSkillsManagerView(ctx, read)
 
   return {
-    view,
+    withView,
     async list(options) {
-      return await view.registry.list({ ...(options ?? {}), ...(view.scope === undefined ? {} : { scope: view.scope }) })
+      return await withView(view => view.registry.list(withViewScope(view, options ?? {})))
     },
     async get(name, options) {
-      return await view.registry.get(name, { ...(options ?? {}), ...(view.scope === undefined ? {} : { scope: view.scope }) })
+      return await withView(view => view.registry.get(name, withViewScope(view, options ?? {})))
     },
   }
 }

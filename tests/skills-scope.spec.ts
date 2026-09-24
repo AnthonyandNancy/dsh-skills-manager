@@ -28,7 +28,7 @@ function manySummaries(count: number) {
 interface MockCtxOptions {
   sessions?: unknown[]
   agents?: { get?: (id: string) => unknown }
-  presets?: { standingKeyFor?: () => Promise<unknown> }
+  presets?: { standingKeyFor?: () => Promise<unknown>; acquireScope?: () => Promise<unknown> }
   registry?: {
     list?: (options: any) => Promise<any[]>
     get?: (name: string, options: any) => Promise<any>
@@ -150,8 +150,9 @@ describe('skills scope resolution', () => {
     expect(registry.list).toHaveBeenCalledWith(expect.objectContaining({ scope: presetScope }))
   })
 
-  it('surfaces a default preset scope resolution failure instead of returning an empty list', async () => {
-    const registry = registryWith([], [])
+  it('warns and falls back to the global skill layer when the default preset cannot be mounted', async () => {
+    const registry = registryWith([], [summary('global-skill')])
+    const warn = vi.fn()
     const ctx = makeCtx({
       presets: {
         standingKeyFor: vi.fn(async () => {
@@ -159,11 +160,89 @@ describe('skills scope resolution', () => {
         }),
       },
       registry,
-      logger: { warn: vi.fn() },
+      logger: { warn },
     })
 
-    await expect(listManagedSkills({ ctx: ctx as never, dshHome: '/tmp/dsh' }))
-      .rejects.toThrow(/failed to resolve default agent preset skill scope/)
+    const rows = await listManagedSkills({ ctx: ctx as never, dshHome: '/tmp/dsh' })
+
+    // A preset the user is still migrating must not take the manager down: DSH's
+    // own skill surface degrades the same way (skill-catalog.ts `scopeFor`).
+    expect(rows.map(row => row.name)).toEqual(['global-skill'])
+    expect(registry.list).toHaveBeenCalledWith(expect.not.objectContaining({ scope: presetScope }))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('default agent preset scope unavailable'), 'preset composition is broken')
+  })
+
+  it('leases the default preset scope on DSH 0.1.7 and releases it after every read', async () => {
+    const registry = registryWith([summary('foo')])
+    const dispose = vi.fn(async () => {})
+    const acquireScope = vi.fn(async () => ({ key: presetScope, [Symbol.asyncDispose]: dispose }))
+    const ctx = makeCtx({ presets: { acquireScope }, registry })
+
+    const access = await createSkillAccess(ctx as never)
+    await access.list({})
+    await access.get('foo', {})
+
+    expect(registry.list).toHaveBeenCalledWith(expect.objectContaining({ scope: presetScope }))
+    expect(registry.get).toHaveBeenCalledWith('foo', expect.objectContaining({ scope: presetScope }))
+    // One read, one lease: an unreleased lease pins the preset generation.
+    expect(acquireScope).toHaveBeenCalledTimes(2)
+    expect(dispose).toHaveBeenCalledTimes(2)
+  })
+
+  it('holds one lease for a whole list batch', async () => {
+    const registry = registryWith(manySummaries(5))
+    const dispose = vi.fn(async () => {})
+    const acquireScope = vi.fn(async () => ({ key: presetScope, [Symbol.asyncDispose]: dispose }))
+    const ctx = makeCtx({ presets: { acquireScope }, registry })
+
+    const rows = await listManagedSkills({ ctx: ctx as never })
+
+    expect(rows).toHaveLength(5)
+    expect(acquireScope).toHaveBeenCalledTimes(1)
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases the scope lease even when the read throws', async () => {
+    const dispose = vi.fn(async () => {})
+    const ctx = makeCtx({
+      presets: { acquireScope: async () => ({ key: presetScope, [Symbol.asyncDispose]: dispose }) },
+      registry: { list: vi.fn(async () => { throw new Error('registry exploded') }) },
+    })
+
+    await expect(listManagedSkills({ ctx: ctx as never })).rejects.toThrow('registry exploded')
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns and lists the global layer when 0.1.7 refuses to lease the default preset', async () => {
+    const registry = registryWith([], [summary('global-skill')])
+    const warn = vi.fn()
+    const ctx = makeCtx({
+      presets: { acquireScope: vi.fn(async () => { throw new Error('agent-preset/invalid') }) },
+      registry,
+      logger: { warn },
+    })
+
+    const rows = await listManagedSkills({ ctx: ctx as never })
+
+    expect(rows.map(row => row.name)).toEqual(['global-skill'])
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('default agent preset scope unavailable'),
+      'agent-preset/invalid',
+    )
+  })
+
+  it('treats a lease without a scope key as the global layer and still releases it', async () => {
+    const dispose = vi.fn(async () => {})
+    const registry = registryWith([], [summary('global-skill')])
+    const ctx = makeCtx({
+      presets: { acquireScope: async () => ({ [Symbol.asyncDispose]: dispose }) },
+      registry,
+    })
+
+    const rows = await listManagedSkills({ ctx: ctx as never })
+
+    expect(rows.map(row => row.name)).toEqual(['global-skill'])
+    expect(dispose).toHaveBeenCalledTimes(1)
   })
 
   it('keeps list and get on the same resolved scope', async () => {

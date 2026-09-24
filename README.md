@@ -97,6 +97,15 @@ The client build remains a CJS closure factory that calls `window.__ModuleLoader
 
 The package targets DSH `0.1.0-rc` or later within the declared peer ranges, and React 18. It uses the current DSH Locale Runtime (`ctx.locale.register`, `ctx.locale.bind`, and the locale-aware settings section slot), the current UI Primitives (`Button`, `Input`, `Menu`, and `Tooltip`), and the current Bundle patch contract.
 
+Where those surfaces changed between releases, the plugin probes what the running Host actually provides instead of pinning one generation:
+
+- **Preset skill scope.** `agentPresets.standingKeyFor()` (≤0.1.6) or `agentPresets.acquireScope()` (≥0.1.7, a reference lease the plugin releases after every read). Neither available — or the preset unusable — the manager lists the global layer and says so in diagnostics.
+- **Import metadata.** `ctx.settings.register()` when the release still exposes that seam; otherwise the plugin persists its own `$DSH_HOME/skills-manager/metadata.json`. DSH 0.1.7 replaced the settings namespace seam with profile-patch form projection, which models composed entries rather than plugin-private data.
+- **Opening the skills folder.** The session Remote (`canOpenWorkspacePath` / `openWorkspacePath`) on releases that mount it, the older `connection.api.host.openPath()` facade on releases that still publish one, and no control at all when neither exists.
+- **Chevron glyph.** `IconChevronDownOutlineMedium`/`Regular` (≥0.1.7) or `IconChevronDownOutline14` (≤0.1.6), resolved at runtime; a kit that ships none renders without the glyph.
+
+The plugin's own devDependencies track the DSH release it is developed against (currently 0.1.7-rc.1) so the type checks see the same contracts the Host enforces.
+
 ## License
 
 BSD-3-Clause. See [LICENSE](LICENSE).

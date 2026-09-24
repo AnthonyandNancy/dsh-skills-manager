@@ -97,6 +97,15 @@ Client 构建仍是调用 `window.__ModuleLoader__.load({ id: 'dsh-skills-manage
 
 包面向 DSH `0.1.0-rc` 及后续声明范围，以及 React 18。实现使用当前 DSH Locale Runtime（`ctx.locale.register`、`ctx.locale.bind` 和 locale-aware Settings section slot）、当前 UI Primitives（`Button`、`Input`、`Menu`、`Tooltip`）和当前 Bundle patch 合约。
 
+这些接口在版本之间发生过迁移，插件因此探测运行中的 Host 实际提供了哪一代，而不是绑定单一版本：
+
+- **预设技能作用域。** `agentPresets.standingKeyFor()`（≤0.1.6）或 `agentPresets.acquireScope()`（≥0.1.7，返回引用租约，插件在每次读取后释放）。两者都不可用或预设不可用时，管理器列出全局层并在诊断中说明。
+- **导入元数据。** 该版本仍提供 `ctx.settings.register()` 时使用它；否则插件写入自己的 `$DSH_HOME/skills-manager/metadata.json`。DSH 0.1.7 用 profile patch 表单投影取代了 settings 命名空间 seam，后者面向组合条目而非插件私有数据。
+- **打开技能目录。** 挂载了 session Remote（`canOpenWorkspacePath` / `openWorkspacePath`）的版本走 Remote；仍发布 `connection.api.host.openPath()` 旧门面的版本走旧门面；两者皆无时不显示该控件。
+- **下拉箭头图标。** `IconChevronDownOutlineMedium`/`Regular`（≥0.1.7）或 `IconChevronDownOutline14`（≤0.1.6），运行时解析；都不提供时不渲染图标。
+
+插件的 devDependencies 跟随其所针对的 DSH 版本（当前为 0.1.7-rc.1），使类型检查看到与 Host 相同的契约。
+
 ## 许可证
 
 BSD-3-Clause，详见 [LICENSE](LICENSE)。

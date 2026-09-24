@@ -10,10 +10,15 @@
 
 import { useState } from 'react'
 import type { ReactElement } from 'react'
-import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
+import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
+import { Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
+import { resolveChevronDownIcon } from './compat.ts'
 import { SKILLS_MANAGER_NS } from './locale.ts'
 import styles from './ScopeSelect.module.css'
+
+/** Resolved once: the primitives kit is one module for the whole page, not a per-render value. */
+const ChevronDown = resolveChevronDownIcon(primitives)
 
 /** The two scopes a managed skill can live in. */
 export type SkillScope = 'global' | 'project'
@@ -55,7 +60,7 @@ export function ScopeSelect({ value, onChange, disabled = false, t }: ScopeSelec
           onClick={() => { setOpen(current => !current) }}
         >
           <span className={styles.triggerLabel}>{value === 'project' ? t('editor.project') : t('editor.global')}</span>
-          <IconChevronDownOutline14 className={styles.chevron} />
+          {ChevronDown === undefined ? null : <ChevronDown className={styles.chevron} />}
         </button>
       )}
     />

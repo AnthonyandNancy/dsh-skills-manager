@@ -1,19 +1,30 @@
 /**
- * Skills Manager JSON API (web profile).
+ * Skills Manager JSON API (host).
  *
- * This is the thin management API used by the Settings → Skills UI. It calls
- * DSH's native Skills registry and DSH-managed skill directories; it never
- * reimplements skill runtime behavior.
+ * Registered as an exact Fetch route on DSH's shared `/api` channel: that is
+ * the one browser API carrier every shipped composition dispatches — the Web
+ * profile's fenced `/api` route and the Electron desktop shell's IPC bridge
+ * alike — and it is where DSH applies its own Host/Origin trust fence plus
+ * browser-session authentication (see `@deepseek-ai/dsh-client-connection`).
+ * The plugin therefore owns no transport, no bind, and no request-trust policy
+ * of its own; it only answers the one POST route it declares.
+ *
+ * The API itself is the thin management API used by the Settings → Skills UI.
+ * It calls DSH's native Skills registry and DSH-managed skill directories; it
+ * never reimplements skill runtime behavior.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { MetadataStore } from './storage.ts'
 import { listManagedSkills, getManagedSkill, createManagedSkill, updateManagedSkill, deleteManagedSkill } from './skills-service.ts'
 import { ensureDshSkillsRoot, runExternalImport, reportFromMetadata, auditDshSkillDuplicates } from './import/importer.ts'
 import { listConflicts, resolveConflict } from './import/resolver.ts'
 import type { ExternalSourceId, ManagedSkillRow } from './types.ts'
 
-export const API_PREFIX = '/skills-manager/api/'
+/** Absolute path of the single POST route this plugin owns below `/api`. */
+export const API_PATH = '/api/skills-manager'
+
+/** Buffered request-body cap; the carrier's own cap is far larger and is not this API's contract. */
+const MAX_REQUEST_BYTES = 256 * 1024
 
 interface RouteServices {
   readonly ctx: any
@@ -25,53 +36,22 @@ type JsonResponse<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string } }
 
-function writeJson<T>(res: ServerResponse, status: number, body: JsonResponse<T>): void {
-  const bytes = Buffer.from(JSON.stringify(body))
-  res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.setHeader('Content-Length', String(bytes.length))
-  res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('X-Content-Type-Options', 'nosniff')
-  res.writeHead(status)
-  res.end(bytes)
+const JSON_HEADERS = {
+  'content-type': 'application/json; charset=utf-8',
+  'cache-control': 'no-store',
+  'x-content-type-options': 'nosniff',
+} as const
+
+function writeJson<T>(status: number, body: JsonResponse<T>): Response {
+  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS })
 }
 
-function error(res: ServerResponse, status: number, code: string, message: string): void {
-  writeJson(res, status, { ok: false, error: { code, message } })
+function error(status: number, code: string, message: string): Response {
+  return writeJson(status, { ok: false, error: { code, message } })
 }
 
-function ok<T>(res: ServerResponse, value: T): void {
-  writeJson(res, 200, { ok: true, value })
-}
-
-/** Accept state-changing requests only from the DSH Web application's origin. */
-function sameOriginPost(req: IncomingMessage): boolean {
-  const fetchSite = req.headers['sec-fetch-site']
-  if (fetchSite === 'cross-site') return false
-  const origin = req.headers.origin
-  if (origin === undefined) return fetchSite === 'same-origin' || fetchSite === 'same-site' || fetchSite === 'none'
-  const host = req.headers.host
-  if (host === undefined) return false
-  try {
-    const parsed = new URL(origin)
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.host === host
-  } catch {
-    return false
-  }
-}
-
-async function readJson(req: IncomingMessage, maxBytes = 256 * 1024): Promise<unknown> {
-  const contentType = req.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase()
-  if (contentType !== 'application/json') throw new TypeError('Content-Type must be application/json')
-  const chunks: Buffer[] = []
-  let bytes = 0
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    bytes += buffer.length
-    if (bytes > maxBytes) throw new TypeError('request body too large')
-    chunks.push(buffer)
-  }
-  const text = Buffer.concat(chunks).toString('utf8')
-  return text.length === 0 ? {} : JSON.parse(text)
+function ok<T>(value: T): Response {
+  return writeJson(200, { ok: true, value })
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -90,40 +70,44 @@ function resolveCwd(payload: Record<string, unknown>): string | undefined {
   return undefined
 }
 
-async function handle(services: RouteServices, req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (req.method !== 'POST') {
-    error(res, 405, 'method-not-allowed', 'POST required')
-    return
-  }
-  if (!sameOriginPost(req)) {
-    error(res, 403, 'forbidden', 'cross-origin request rejected')
-    return
-  }
+async function readJson(request: Request): Promise<unknown> {
+  const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+  if (contentType !== 'application/json') throw new TypeError('Content-Type must be application/json')
+  const declared = Number(request.headers.get('content-length') ?? '')
+  if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) throw new TypeError('request body too large')
+  const text = await request.text()
+  if (Buffer.byteLength(text, 'utf8') > MAX_REQUEST_BYTES) throw new TypeError('request body too large')
+  return text.length === 0 ? {} : JSON.parse(text)
+}
 
+/**
+ * Dispatch one request. The carrier has already applied its trust and
+ * authentication policy, so this function only parses, routes, and answers.
+ * @param services - host services the API reads and writes through.
+ * @param request - POST request carrying `{ method, ...args }` as JSON.
+ * @returns the JSON envelope response.
+ */
+async function handle(services: RouteServices, request: Request): Promise<Response> {
   let payload: Record<string, unknown>
   try {
-    const raw = await readJson(req)
-    payload = asRecord(raw)
+    payload = asRecord(await readJson(request))
   } catch (err) {
-    error(res, 400, 'bad-request', err instanceof Error ? err.message : String(err))
-    return
+    return error(400, 'bad-request', err instanceof Error ? err.message : String(err))
   }
 
-  const url = new URL(req.url ?? '/', 'http://localhost')
-  if (!url.pathname.startsWith(API_PREFIX)) {
-    error(res, 404, 'not-found', 'unknown skills-manager API method')
-    return
-  }
-  const method = url.pathname.slice(API_PREFIX.length)
+  const method = stringField(payload.method)
+  if (method === undefined) return error(400, 'bad-request', 'method is required')
 
   try {
+    // The store may still be loading what the previous run persisted, and every
+    // branch below reads or rewrites that state: settle it before dispatch.
+    await services.metadata.ready()
     switch (method) {
       case 'skills.directory': {
         // This endpoint deliberately accepts no path. The Host resolves the
         // authoritative DSH home and creates only its native skills root.
         const directory = await ensureDshSkillsRoot(services.dshHome)
-        ok(res, { directory })
-        return
+        return ok({ directory })
       }
       case 'skills.list': {
         const cwd = resolveCwd(payload)
@@ -139,16 +123,14 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
           sessionCount,
         )
         const skills = await listManagedSkills({ ctx: services.ctx, dshHome: services.dshHome }, cwd)
-        ok(res, { skills })
-        return
+        return ok({ skills })
       }
       case 'skills.get': {
         const name = stringField(payload.name)
         if (name === undefined) throw new Error('name is required')
         const cwd = resolveCwd(payload)
         const skill = await getManagedSkill({ ctx: services.ctx, dshHome: services.dshHome }, name, cwd)
-        ok(res, { skill })
-        return
+        return ok({ skill })
       }
       case 'skills.create': {
         const name = stringField(payload.name)
@@ -165,8 +147,7 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
           { ctx: services.ctx, dshHome: services.dshHome },
           { name, description, ...whenToUse === undefined ? {} : { whenToUse }, body },
         )
-        ok(res, { skill })
-        return
+        return ok({ skill })
       }
       case 'skills.update': {
         const name = stringField(payload.name)
@@ -182,47 +163,41 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
           { name, description, ...whenToUse === undefined ? {} : { whenToUse }, body },
           cwd,
         )
-        ok(res, { skill })
-        return
+        return ok({ skill })
       }
       case 'skills.delete': {
         const name = stringField(payload.name)
         if (name === undefined) throw new Error('name is required')
         const cwd = resolveCwd(payload)
         await deleteManagedSkill({ ctx: services.ctx, dshHome: services.dshHome }, name, cwd)
-        ok(res, { deleted: name })
-        return
+        return ok({ deleted: name })
       }
       case 'import.scan': {
         const cwd = resolveCwd(payload)
         const report = await runExternalImport(services, cwd)
-        ok(res, { report })
-        return
+        return ok({ report })
       }
       case 'import.meta': {
         const meta = services.metadata.get()
         const report = reportFromMetadata(services.metadata)
-        ok(res, {
+        return ok({
           externalImportCompleted: meta.externalImportCompleted,
           ...meta.lastScan === undefined ? {} : { lastScanAt: meta.lastScan.finishedAt },
           ...report === undefined ? {} : { report },
         })
-        return
       }
       case 'import.audit': {
         // Report-only diagnostics, requested explicitly: it re-fingerprints
         // every native skill and must never run during normal rendering.
         const cwd = resolveCwd(payload)
         const audit = await auditDshSkillDuplicates(services.ctx, cwd)
-        ok(res, { audit })
-        return
+        return ok({ audit })
       }
       case 'import.conflicts': {
         const cwd = resolveCwd(payload)
         const rows: ManagedSkillRow[] = await listManagedSkills({ ctx: services.ctx, dshHome: services.dshHome }, cwd)
         const conflicts = listConflicts(services.metadata, rows)
-        ok(res, { conflicts })
-        return
+        return ok({ conflicts })
       }
       case 'import.resolve': {
         const name = stringField(payload.name)
@@ -230,28 +205,35 @@ async function handle(services: RouteServices, req: IncomingMessage, res: Server
         if (name === undefined || source === undefined) throw new Error('name and source are required')
         const cwd = resolveCwd(payload)
         await resolveConflict({ ctx: services.ctx, dshHome: services.dshHome }, services.metadata, { name, source }, cwd)
-        ok(res, { resolved: name })
-        return
+        return ok({ resolved: name })
       }
       default:
-        error(res, 404, 'not-found', `unknown method "${method}"`)
+        return error(404, 'not-found', `unknown method "${method}"`)
     }
   } catch (err) {
-    error(res, 400, 'skills-manager-error', err instanceof Error ? err.message : String(err))
+    return error(400, 'skills-manager-error', err instanceof Error ? err.message : String(err))
   }
 }
 
-/** Register the Skills Manager JSON API on DSH's web server (if present). */
+/** Register the Skills Manager JSON API on DSH's shared `/api` Fetch registry. */
 export function installRoutes(services: RouteServices): void {
   const { ctx } = services
-  ctx.inject(['webServer'], (webCtx: any) => {
-    webCtx.effect(() => {
-      const dispose = webCtx.webServer.register({
-        kind: 'prefix',
-        path: API_PREFIX.replace(/\/$/, ''),
-        handler: (req: IncomingMessage, res: ServerResponse) => { void handle(services, req, res) },
+  ctx.inject(['connection'], (connectionCtx: any) => {
+    connectionCtx.effect(() => {
+      const connection = connectionCtx.connection
+      if (typeof connection?.fetch?.register !== 'function') {
+        connectionCtx.logger?.warn?.(
+          '[dsh-skills-manager] this DSH release has no connection Fetch registry; the Skills Manager API stays unregistered',
+        )
+        return
+      }
+      const dispose = connection.fetch.register({
+        path: API_PATH,
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: (request: Request) => handle(services, request),
       })
-      return dispose
-    }, 'dsh-skills-manager: routes')
+      return () => { void dispose() }
+    }, 'dsh-skills-manager: /api fetch route')
   })
 }
