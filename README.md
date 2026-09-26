@@ -80,7 +80,7 @@ pnpm run build
 pnpm pack
 ```
 
-`prepack` builds both Host and Client artifacts and checks the Bundle metadata. The published tarball contains prebuilt `lib/index.js`, `lib/client.js`, declarations, `cordis.patch.yml`, both READMEs, and `LICENSE`.
+`prepack` builds both Host and Client artifacts and checks the Bundle metadata. The published tarball contains prebuilt `lib/index.js`, `lib/client.js`, declarations, `cordis.patch.yml`, both READMEs, and `LICENSE`. `lib/` is committed as well, so a git install (`dsh plugin add github:AnthonyandNancy/dsh-skills-manager`) needs no pnpm build approval; rebuild with `pnpm run build` and commit `lib/` before tagging a release.
 
 ## Publish
 

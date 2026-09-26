@@ -80,7 +80,7 @@ pnpm run build
 pnpm pack
 ```
 
-`prepack` 会构建 Host 和 Client 产物并检查 Bundle metadata。发布 tarball 包含预构建的 `lib/index.js`、`lib/client.js`、声明文件、`cordis.patch.yml`、中英文 README 和 `LICENSE`。
+`prepack` 会构建 Host 和 Client 产物并检查 Bundle metadata。发布 tarball 包含预构建的 `lib/index.js`、`lib/client.js`、声明文件、`cordis.patch.yml`、中英文 README 和 `LICENSE`。`lib/` 同时提交进仓库，因此 git 安装（`dsh plugin add github:AnthonyandNancy/dsh-skills-manager`）不需要 pnpm 构建批准；打 tag 发布前必须重新执行 `pnpm run build` 并提交 `lib/`。
 
 ## 发布
 

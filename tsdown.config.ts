@@ -31,7 +31,7 @@ const cssModulesPlugin = {
     const source = await readFile(fileId)
     const { code, exports: cssExports } = transform({ filename: fileId, code: source, cssModules: { pattern: '[hash]_[local]' }, minify: true })
     const classMap: Record<string, string> = {}
-    for (const [local, exported] of Object.entries(cssExports ?? {})) classMap[local] = exported.name
+    for (const [local, exported] of Object.entries(cssExports ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) classMap[local] = exported.name
     const tagId = `${PLUGIN_ID}/${basename(fileId)}`
     return [
       `const css = ${JSON.stringify(code.toString())};`,
