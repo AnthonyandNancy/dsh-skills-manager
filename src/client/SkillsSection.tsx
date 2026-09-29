@@ -19,7 +19,9 @@ import table from './SkillsTable.module.css'
 export interface SkillsSectionInjected {
   api: SkillsManagerApi
   connection?: ConnectionHandle
-  remote?: { $on?: (event: string, listener: () => void) => () => void; session?: SessionPathRemote }
+  remote?: { $on?: (event: string, listener: () => void) => () => void }
+  /** The ≥0.1.7 session Remote namespace, resolved per use because 0.2.0 gates it behind its own inject. */
+  session?: () => SessionPathRemote | undefined
 }
 
 export interface SkillsSectionProps extends SkillsSectionInjected {
@@ -34,7 +36,7 @@ export function SkillsSection(props: SkillsSectionProps): ReactElement {
 }
 
 function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
-  const { api, connection, remote, t } = props
+  const { api, connection, remote, session, t } = props
   const [skills, setSkills] = useState<ManagedSkillRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | undefined>()
@@ -61,11 +63,11 @@ function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
     let cancelled = false
     // Current releases answer this over the session Remote, so the control stays
     // hidden until the Host has actually answered instead of guessing.
-    void canOpenSkillsDirectory(connection, hostDescription, remote?.session).then((available) => {
+    void canOpenSkillsDirectory(connection, hostDescription, session?.()).then((available) => {
       if (!cancelled) setCanOpenFolder(available)
     })
     return () => { cancelled = true }
-  }, [connection, hostDescription, remote])
+  }, [connection, hostDescription, session])
 
   useEffect(() => {
     setConnectionState(readConnectionState(stateSource))
@@ -223,13 +225,13 @@ function SkillsSectionContent(props: SkillsSectionProps): ReactElement {
     setBusy(true)
     setError(undefined)
     try {
-      await openFixedSkillsDirectory(api, connection, remote?.session)
+      await openFixedSkillsDirectory(api, connection, session?.())
     } catch (err) {
       setError(formatError(t, 'errors.openSkillsDirectory', err))
     } finally {
       setBusy(false)
     }
-  }, [api, canOpenFolder, connection, remote, t])
+  }, [api, canOpenFolder, connection, session, t])
   const unavailableLabel = t('toolbar.openSkillsFolderUnavailable')
 
   if (mode === 'detail' && selected !== undefined) {

@@ -10,8 +10,9 @@ export interface SkillsSectionInjected {
     connection?: ConnectionHandle;
     remote?: {
         $on?: (event: string, listener: () => void) => () => void;
-        session?: SessionPathRemote;
     };
+    /** The ≥0.1.7 session Remote namespace, resolved per use because 0.2.0 gates it behind its own inject. */
+    session?: () => SessionPathRemote | undefined;
 }
 export interface SkillsSectionProps extends SkillsSectionInjected {
     close: () => void;

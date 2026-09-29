@@ -27,6 +27,23 @@ export interface SessionPathRemote {
         path: string;
     }) => Promise<PathGestureReply | undefined>;
 }
+/** The inject-free service lookup every Cordis context carries. */
+export interface OptionalServiceSource {
+    get(name: string): unknown;
+}
+/**
+ * Resolve the session Remote namespace without declaring it as a dependency.
+ *
+ * DSH 0.2.0 mounts each Remote namespace as its own `remote.<namespace>`
+ * service, so reading `remote.session` off the Remote facade resolves through
+ * the dependency gate and throws when the plugin did not inject it — while
+ * injecting it would park the whole plugin on releases that mount no such
+ * namespace. `ctx.get()` is the framework's optional lookup: it answers the
+ * service where one is mounted and `undefined` everywhere else.
+ * @param source - context carrying `get`, the inject-free service lookup.
+ * @returns the session namespace when this release mounts it, else `undefined`.
+ */
+export declare function sessionRemoteOf(source: OptionalServiceSource | undefined): SessionPathRemote | undefined;
 /**
  * Whether this deployment can open the skills directory in the OS file manager.
  *

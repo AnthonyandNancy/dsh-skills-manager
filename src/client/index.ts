@@ -11,6 +11,7 @@ import { isClientContextCompatible } from './compat.ts'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { skillsManagerApi, type SkillsManagerApi } from './api.ts'
+import { sessionRemoteOf } from './open-skills-folder.ts'
 import { SkillsSection, type SkillsSectionInjected } from './SkillsSection.tsx'
 import { en, SKILLS_MANAGER_NS, zh } from './locale.ts'
 
@@ -57,6 +58,9 @@ export function apply(ctx: SkillsManagerClientContext): void {
         api: skillsManagerApi,
         connection: ctx.get('connection') as ConnectionHandle,
         remote: ctx.get('remote') as SkillsSectionInjected['remote'],
+        // Resolved per use: 0.2.0 mounts each Remote namespace as its own gated
+        // service, so this one is optional rather than a declared dependency.
+        session: () => sessionRemoteOf(ctx),
       }),
     }, SkillsSection),
   )

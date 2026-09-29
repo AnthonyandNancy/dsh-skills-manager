@@ -29,6 +29,29 @@ export interface SessionPathRemote {
   openWorkspacePath?: (request: { path: string }) => Promise<PathGestureReply | undefined>
 }
 
+/** The inject-free service lookup every Cordis context carries. */
+export interface OptionalServiceSource {
+  get(name: string): unknown
+}
+
+/**
+ * Resolve the session Remote namespace without declaring it as a dependency.
+ *
+ * DSH 0.2.0 mounts each Remote namespace as its own `remote.<namespace>`
+ * service, so reading `remote.session` off the Remote facade resolves through
+ * the dependency gate and throws when the plugin did not inject it — while
+ * injecting it would park the whole plugin on releases that mount no such
+ * namespace. `ctx.get()` is the framework's optional lookup: it answers the
+ * service where one is mounted and `undefined` everywhere else.
+ * @param source - context carrying `get`, the inject-free service lookup.
+ * @returns the session namespace when this release mounts it, else `undefined`.
+ */
+export function sessionRemoteOf(source: OptionalServiceSource | undefined): SessionPathRemote | undefined {
+  if (typeof source?.get !== 'function') return undefined
+  const session = source.get('remote.session')
+  return session === undefined || session === null ? undefined : session as SessionPathRemote
+}
+
 /** The ≤0.1.4 `connection.api.host.openPath` signature. */
 type LegacyHostOpenPath = (request: { path: string }) => Promise<{ result?: { ok?: boolean; error?: { message?: string } } } | undefined>
 

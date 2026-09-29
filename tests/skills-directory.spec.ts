@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { ensureDshSkillsRoot, resolveDshSkillsRoot } from '../src/import/importer.ts'
-import { canOpenSkillsDirectory, openSkillsDirectory } from '../src/client/open-skills-folder.ts'
+import { canOpenSkillsDirectory, openSkillsDirectory, sessionRemoteOf } from '../src/client/open-skills-folder.ts'
 
 describe('fixed DSH skills directory', () => {
   it('resolves the Host directory under dshHome/skills', () => {
@@ -68,5 +68,26 @@ describe('fixed DSH skills directory', () => {
     await expect(openSkillsDirectory(api, undefined, { openWorkspacePath: async () => ({ ok: false }) })).rejects.toThrow('refused')
     await expect(openSkillsDirectory(api, legacyFailure, undefined)).rejects.toThrow('native opener failed')
     await expect(openSkillsDirectory(api, undefined, undefined)).rejects.toThrow('no way to open')
+  })
+
+  it('resolves the session namespace through the inject-free lookup and stays usable', async () => {
+    // DSH 0.2.0 mounts `remote.session` as its own service, so reading it off the
+    // Remote facade throws unless the plugin declared that dependency.
+    const session = { openWorkspacePath: vi.fn().mockResolvedValue({ ok: true }), canOpenWorkspacePath: vi.fn().mockResolvedValue({ ok: true, value: true }) }
+    const ctx = { get: (name: string) => (name === 'remote.session' ? session : undefined) }
+
+    expect(sessionRemoteOf(ctx)).toBe(session)
+    const api = { skillsDirectory: vi.fn().mockResolvedValue({ directory: '/dsh/skills' }) }
+    expect(await canOpenSkillsDirectory({ isLoopback: true }, undefined, sessionRemoteOf(ctx))).toBe(true)
+    await expect(openSkillsDirectory(api, undefined, sessionRemoteOf(ctx))).resolves.toBe('/dsh/skills')
+  })
+
+  it('reads a release without the session namespace as absent instead of throwing', async () => {
+    // Releases that mount none, and a context that cannot be read at all.
+    expect(sessionRemoteOf({ get: () => undefined })).toBeUndefined()
+    expect(sessionRemoteOf({ get: () => null })).toBeUndefined()
+    expect(sessionRemoteOf(undefined)).toBeUndefined()
+    expect(sessionRemoteOf({} as never)).toBeUndefined()
+    expect(await canOpenSkillsDirectory({ isLoopback: true }, { canOpenPath: false }, sessionRemoteOf({ get: () => undefined }))).toBe(false)
   })
 })
